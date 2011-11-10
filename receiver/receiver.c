@@ -1,8 +1,8 @@
-/* receiver-savetodvtool.c */
+/* receiver.c */
 
 
-// A program to capture, demodulate, a gmsk stream from an audio-port
-// (ALSA), extracts the D-STAR stream and saves it to a .dvtool file
+// A program to capture/read, demodulate, a gmsk stream from an audio-port
+// (ALSA) or file, extracts the D-STAR stream and saves it to a .dvtool file
 
 // The low-level DSP and radio header decoding functions are largly
 // based on code from the pcrepeatercontroller project written by
@@ -75,6 +75,9 @@
 // support functions
 #include "printbit.h"
 #include "countdiff.h"
+#include "parsecliopts.h"
+#include "initalsa.h"
+#include "initinfile.h"
 
 
 // functions used by main program
@@ -91,19 +94,12 @@ int main (int argc, char ** argv) {
 
 int ret;
 
-char * capturedevice;
+char retmsg[160];
+int retval;
 
 
 int loop;
-int dir;
 int size;
-
-snd_pcm_hw_params_t *params;
-snd_pcm_uframes_t frames;
-
-int period=960; // 48000 samples/second, 20 ms = 960 samples
-unsigned int rate=48000;
-unsigned int val;
 
 // vars for timed interrupts
 struct sigaction sa;
@@ -120,79 +116,54 @@ pthread_t thr_processaudio;
 // Command line parameters parsing
 //
 
-if (argc <= 2) {
-	fprintf(stderr,"Error: missing parameters: need alsa device name and output filename.\n");
+// parse CLI options, store info in global data
+// returns 0 if all OK; -1 on error, 1 on warning
+retval=parsecliopts(argc,argv,retmsg);
+
+if (retval < 0) {
+// -1: error
+	fprintf(stderr,"%s",retmsg);
 	exit(-1);
-}; // end if
+} else if (retval > 0) {
+// +1: warning
+	fprintf(stderr,"%s",retmsg);
+}; // end elsif - if
 
-capturedevice=argv[1];
 
-global.fnameout=argv[2];
+if (global.fileorcapture == 0) {
+	retval=init_alsa(retmsg);
+} else if (global.fileorcapture == 1) {
+	retval=init_infile(retmsg);
+} else {
+	// not capture or file input
+	fprintf(stderr,"Error: invalid value for file-or-capture. Shouldn't happen!\n");
+	exit(-1);
+}; // end else - elsif - if
+	
 
-
-///////////////////////////////
-// init ALSA device
-
-/* Open PCM device for recording (capture). */
-ret = snd_pcm_open(&global.handle, capturedevice, SND_PCM_STREAM_CAPTURE, 0);
-if (ret < 0) {
-	fprintf(stderr, "unable to open pcm device: %s\n", snd_strerror(ret));
-	exit(1);
-}
-
-/* Allocate a hardware parameters object. */
-snd_pcm_hw_params_alloca(&params);
-
-/* Fill it in with default values. */
-snd_pcm_hw_params_any(global.handle, params);
-
-/* Set the desired hardware parameters. */
-
-/* Interleaved mode */
-snd_pcm_hw_params_set_access(global.handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
-
-/* Signed 16-bit little-endian format */
-snd_pcm_hw_params_set_format(global.handle, params, SND_PCM_FORMAT_S16_LE);
-
-/* One channel (mono) */
-snd_pcm_hw_params_set_channels(global.handle, params, 1);
-
-/* 48 Khz sampling rate */
-val=rate;
-snd_pcm_hw_params_set_rate_near(global.handle, params, &val, &dir);
-
-/* Try to set the period size to 960 frames (20 ms at 48Khz sampling rate). */
-frames = period;
-snd_pcm_hw_params_set_period_size_near(global.handle, params, &frames, &dir);
-
-// set_period_size_near TRIES to set the period size to a certain
-// value. However, there is no garantee that the audio-driver will accept
-// this. So read the actual configured value from the device
-
-// get actual periode size from driver for capture and playback
-// capture
-snd_pcm_hw_params_get_period_size(params, &frames, &dir);
-global.frames = frames;
-
-if (frames != period) {
-	printf("periode could not be set: wanted %d, got %d \n",period,(int) global.frames);
-}; // end if
-
-/* Write the parameters to the driver */
-ret = snd_pcm_hw_params(global.handle, params);
-if (ret < 0) {
-	fprintf(stderr, "unable to set hw parameters: %s\n", snd_strerror(ret));
-	exit(1);
-}
+if (retval < 0) {
+// -1: error
+	fprintf(stderr,"%s",retmsg);
+	exit(-1);
+} else if (retval > 0) {
+// +1: warning
+	fprintf(stderr,"%s",retmsg);
+}; // end elsif - if
 
 
 /////////////////////
 // CREATE BUFFERS to transfer audio from "capture" to "process"
 // functions
 
-size = global.frames * 2; /* 2 bytes/sample, 1 channel */
+if (global.fileorcapture == 0) {
+	// if ALSA, get frame size from information returned by alsa drivers
+	size = global.frames * 2; /* 2 bytes/sample, 1 channel */
+} else {
+	// file, size is filed: 960 * 2 (16 bits / samples)
+	size=1920;
+}; // end if
 
-// create 8 buffers
+// create 256 buffers
 for (loop=0;loop<=255;loop++) {
 	global.buffer[loop] = (char *) malloc(size);
 
@@ -200,6 +171,9 @@ for (loop=0;loop<=255;loop++) {
 		fprintf(stderr,"Error: could not allocate memory for buffer %d\n",loop);
 		exit(-1);
 	}; // end if
+
+	// init fileend
+	global.fileend[loop]=0;
 }; // end for
 
 // init buffer pointers

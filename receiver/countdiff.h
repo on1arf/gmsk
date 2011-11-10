@@ -25,7 +25,7 @@
 
 int countdiff64(uint64_t data, uint64_t mask, int size, uint64_t target, int maxdiff) {
 	int loop;
-	int bit, lastbit;
+	int bit, lastbit=0;
 	int penalty;
 
 	uint64_t diff;

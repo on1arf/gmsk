@@ -5,6 +5,7 @@
 
 
 // version 20111107: initial release
+// version 20111110: read from file, dump bits, dump amplitude
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -30,6 +31,7 @@ int16_t audioin;
 int nextbuffer;
 int thisbuffer;
 int thisbuffersize;
+int thisfileend;
 
 int sampleloop;
 int16_t * audiobuffer;
@@ -37,15 +39,15 @@ int16_t * audiobuffer;
 int bit, state;
 
 int bitcount, octetcount;
-int bitposition;
-int octetposition;
+int bitposition=0;
+int octetposition=0;
 
 int filesize;
 
 uint16_t last2octets;
 int syncreceived;
-uint64_t last8octets;
-int radioheaderreceived;
+uint64_t last8octets=0;
+int radioheaderreceived=0;
 int radioheaderbuffer[660];
 int radioheaderbuffer2[660];
 char radioheader[41];
@@ -61,7 +63,7 @@ struct timeval now;
 struct timezone tz;
 
 int filecount;
-int framecount;
+int framecount=0;
 char fnamefull[160];
 
 uint16_t FCSinheader;
@@ -125,8 +127,11 @@ dvframe.dataorvoice=0x20;
 dvframe.unknown2[0]=0x00; dvframe.unknown2[1]=0x01; dvframe.unknown2[2]=0x01; 
 
 
+// init thisfileend
+thisfileend=0;
+
 // endless loop;
-while (1) {
+while (!(thisfileend)) {
 
 	// is there something to process?
 
@@ -146,11 +151,20 @@ while (1) {
 	audiobuffer= (int16_t *) p_global->buffer[thisbuffer];
 	thisbuffersize=p_global->buffersize[thisbuffer];
 
+	if (global.fileorcapture) {
+		thisfileend=p_global->fileend[thisbuffer];
+	}; // end if
+
+	if (global.dumpaverage) {
+		printf("(%04X)",p_global->audioaverage[thisbuffer]);
+	}; // end if
 
 	for (sampleloop=0; sampleloop <thisbuffersize; sampleloop++) {
 		audioin=audiobuffer[sampleloop];
 
+
 		bit=demodulate(audioin);
+//fprintf(stderr,"%d %04X %d\n",audioin, audioin,bit);
 
 		// the demodulate function returns three possible values:
 		// -1: not a valid bit
@@ -170,6 +184,10 @@ while (1) {
 
 		// state 0
 		if (state == 0) {
+			if (global.dumpstream >= 2) {
+				printbit(bit,6,2,0);
+			}; // end if
+
 			// keep track of last 16 bits
 			last2octets<<=1;
 			if (bit) {
@@ -182,6 +200,13 @@ while (1) {
 					// OK, we have a valid frame sync, go to state 1
 					state=1;
 					radioheaderreceived=0;
+
+					// reset print-bit to beginning of stream
+					if (global.dumpstream >= 2) {
+						putchar(0x0a); // ASCII 0x0a = linefeed
+					}; // end if
+					printbit(-1,0,0,0);
+
 
 					// go to next frame
 					continue;
@@ -352,7 +377,9 @@ while (1) {
 				marker='S';
 			}; // end if
 
-			printbit(bit,6,2,marker);
+			if (global.dumpstream >= 1) {
+				printbit(bit,6,2,marker);
+			}; // end if
 
 
 			// store bits into 12 octet structure
@@ -543,11 +570,11 @@ while (1) {
 	p_global->pntr_process = nextbuffer;
 
 
-}; // end while (endless loop)
+}; // end while (for capture: endless loop; for file: EOF)
 
 
-/// end main program
-return(0);
-}; // end main program
+/// end program
+exit(0);
+}; // end thread "process audio"
 
 

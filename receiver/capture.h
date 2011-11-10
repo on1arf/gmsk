@@ -9,6 +9,7 @@
 
 
 // version 20111107: initial release
+// version 20111109: add input from file
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -35,14 +36,113 @@ char *p;
 // break of if that is the case
 
 if (global.audioread) {
-	putc('R',stderr);
-	return;
+
+	// only print warning when capturing from audiodevice
+	if (global.fileorcapture == 0) {
+		putc('R',stderr);
+		return;
+	}; // end if
 }; // end if
 
 // make thread as running
 global.audioread=1;
 
+if (global.fileorcapture) {
+	// READ FROM FILE
 
+	// exit if file completely read
+	if (feof(global.filein)) {
+		return;
+	}; // end if
+
+	int stop=0;
+	int eof=0;
+
+	// reading from file goes much faster then processing data, so check if
+	// we can store it BEFORE reading from file
+
+	
+	// do we have some place to store the audio?
+	nextbuffer = (global.pntr_capture +1) & 0xFF;
+
+	while ((nextbuffer != global.pntr_process) && !(stop)) {
+		int32_t average;
+		int16_t *pointer;
+
+		p=global.buffer[global.pntr_capture];
+
+
+		// OK, we have place to store it
+
+		rc=fread(p, sizeof(int16_t), 960, global.filein);
+
+		if (rc < 960) {
+			// less then 960 samples read.
+
+			// EOF?
+			if (feof(global.filein)) {
+				fprintf(stderr, "EOF: read %d frames\n", rc);
+				stop=1;
+				eof=1;
+			} else {
+				fprintf(stderr, "UNEXPECTED short read: read %d frames\n", rc);
+				stop=1;
+			}; // end else - if
+		}; // end  if
+
+		// store data
+		global.buffersize[global.pntr_capture]=rc;
+
+		if (eof) {
+			global.fileend[global.pntr_capture]=1;
+		}; // end if
+		
+
+		// calculate average of absolute value
+		// this will given an indication of the amplitude of the
+		// received signal
+		// we only do this when we have 960 samples (as we are supposted to have)
+		// as we do not divide by 960 but by 1024 (shift right 10) as this is
+		// faster then division
+
+		if (rc == 960) {
+			int loop;
+
+			average=0;
+			pointer= (int16_t *)p;
+
+			for (loop=0;loop<rc;loop++) {
+			average += abs(*pointer);
+				pointer += sizeof(int16_t);
+			}; // end for
+
+			// bitshift right 10 = divide by 1024 (is faster then division)
+			average >>= 10;
+
+			// store average
+			global.audioaverage[global.pntr_capture]=average;
+		} else {
+			global.audioaverage[global.pntr_capture]=0;
+		}; // end if
+
+		// set pointer forward
+		global.pntr_capture=nextbuffer;
+
+		// do we still have more place to store the next audio frame?
+		nextbuffer = (global.pntr_capture +1) & 0xFF;
+	}; // end whille
+
+// DONE
+
+// mark thread as stopped
+global.audioread=0;
+
+return;
+};
+
+
+
+// CAPTURE FROM ALSA AUDIO DEVICE
 
 p=global.buffer[global.pntr_capture];
 
@@ -50,10 +150,10 @@ p=global.buffer[global.pntr_capture];
 rc = snd_pcm_readi(global.handle, p, global.frames);
 
 if (rc == -EPIPE) {
-     /* EPIPE means overrun */
-     fprintf(stderr, "overrun occurred CAPTURE %d\n",errorcount);
-		errorcount++;
-     snd_pcm_prepare(global.handle);
+	/* EPIPE means overrun */
+	fprintf(stderr, "overrun occurred CAPTURE %d\n",errorcount);
+	errorcount++;
+	snd_pcm_prepare(global.handle);
 	return;
 } else if (rc < 0) {
 	fprintf(stderr, "error from read: %s\n", snd_strerror(rc));
@@ -75,20 +175,22 @@ if (global.pntr_process == nextbuffer) {
 	int16_t *pointer;
 
 	global.buffersize[global.pntr_capture]=rc;
-	global.pntr_capture=nextbuffer;
+
+	// calculate average of absolute value
+	// this will given an indication of the amplitude of the
+	// received signal
+	// we only do this when we have 960 samples (as we are supposted to have)
+	// as we do not divide by 960 but by 1024 (shift right 10) as this is
+	// faster then division
 
 	if (rc == 960) {
 		int loop;
-
-		// calculate average of absolute value
-		// this will given an indication of the amplitude of the
-		// received signal
 
 		average=0;
 		pointer= (int16_t *)p;
 
 		for (loop=0;loop<rc;loop++) {
-			average += abs(*pointer);
+		average += abs(*pointer);
 			pointer += sizeof(int16_t);
 		}; // end for
 
@@ -97,10 +199,15 @@ if (global.pntr_process == nextbuffer) {
 
 		// store average
 		global.audioaverage[global.pntr_capture]=average;
+	} else {
+		global.audioaverage[global.pntr_capture]=0;
 	}; // end if
 
-}; // end else - if
 
+	// set pointer forward
+	global.pntr_capture=nextbuffer;
+
+}; // end else - if
 
 // mark thread as stopped
 global.audioread=0;
