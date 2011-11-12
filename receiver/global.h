@@ -36,6 +36,8 @@ int audioread;
 char * fnameout;
 int dumpstream;
 int dumpaverage;
+int invert;
+int stereo;
 } globaldatastr;
 
 // global data structure itself

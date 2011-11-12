@@ -12,10 +12,12 @@ global.fileorcapture=-1;
 global.fnameout=NULL;
 global.dumpstream=0;
 global.dumpaverage=0;
+global.invert=0;
+global.stereo=0;
 
 
 // usage:
-// receiver {-a alsadevice | -f filein} fileout
+// receiver [-d] [-dd] [-da] [-i] [-s] {-a alsadevice | -f filein} fileout
 // known options
 
 for (paramloop=1; paramloop <argc; paramloop++) {
@@ -60,11 +62,15 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 	} else if (strcmp(thisarg,"-da") == 0) {
 		// -da: dump average audio level data
 		global.dumpaverage=1;
-
 		if (! global.dumpstream) {
 			global.dumpstream=1;
 		}; // end if
-
+	} else if (strcmp(thisarg,"-i") == 0) {
+		// -i: invert
+		global.invert=1;
+	} else if (strcmp(thisarg,"-s") == 0) {
+		// -s: stereo
+		global.stereo=1;
 	} else {
 		// last option: output file name
 
@@ -83,12 +89,12 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 // Done all parameters. Check if we have sufficient parameters
 
 if (global.fileorcapture == -1) {
-	snprintf(retmsg,160,"Error: input source missing.\nUsage: receiver [-d] [-dd] [-da] {-a alsadevice | -f inputfilename} outputfilename\n");
+	snprintf(retmsg,160,"Error: input source missing.\nUsage: receiver [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} outputfilename\n");
 	return(-1);
 }; // end if
 
 if (!(global.fnameout)) {
-	snprintf(retmsg,160,"Error: output file missing.\nUsage: receiver [-d] [-dd] [-da] {-a alsadevice | -f inputfilename} outputfilename\n");
+	snprintf(retmsg,160,"Error: output file missing.\nUsage: receiver [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} outputfilename\n");
 	return(-1);
 }; // end if
 

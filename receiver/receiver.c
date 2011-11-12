@@ -5,7 +5,7 @@
 // (ALSA) or file, extracts the D-STAR stream and saves it to a .dvtool file
 
 // The low-level DSP and radio header decoding functions are largly
-// based on code from the pcrepeatercontroller project written by
+// taken from the pcrepeatercontroller project written by
 // Jonathan Naylor, G4KLX
 // More info: http://groups.yahoo.com/group/pcrepeatercontroller
 
@@ -98,6 +98,8 @@ char retmsg[160];
 int retval;
 
 
+int octetpersample;
+int numbuffer;
 int loop;
 int size;
 
@@ -130,6 +132,7 @@ if (retval < 0) {
 }; // end elsif - if
 
 
+// INIT ALSA or FILE (depending on CLI options)
 if (global.fileorcapture == 0) {
 	retval=init_alsa(retmsg);
 } else if (global.fileorcapture == 1) {
@@ -155,16 +158,26 @@ if (retval < 0) {
 // CREATE BUFFERS to transfer audio from "capture" to "process"
 // functions
 
+if (global.stereo) {
+	octetpersample=4;
+	numbuffer=128;
+} else {
+	octetpersample=2;
+	numbuffer=256;
+}; // end else - if
+
+
+
 if (global.fileorcapture == 0) {
 	// if ALSA, get frame size from information returned by alsa drivers
-	size = global.frames * 2; /* 2 bytes/sample, 1 channel */
+	size = global.frames * octetpersample;
 } else {
-	// file, size is filed: 960 * 2 (16 bits / samples)
-	size=1920;
+	// file, size is fixed: 960 samples
+	size=960 * octetpersample;
 }; // end if
 
-// create 256 buffers
-for (loop=0;loop<=255;loop++) {
+// create buffers
+for (loop=0;loop<numbuffer;loop++) {
 	global.buffer[loop] = (char *) malloc(size);
 
 	if (global.buffer[loop] == NULL) {
@@ -178,7 +191,7 @@ for (loop=0;loop<=255;loop++) {
 
 // init buffer pointers
 global.pntr_capture=0;
-global.pntr_process=255;
+global.pntr_process=numbuffer-1;
 
 
 
@@ -225,13 +238,16 @@ if (ret < 0) {
 // Configured timed interrupt, that will trigger a "SIG" interrupt
 // every 20 ms
 
-// start timed function timer capture, every 20 ms, no offset (1 ns)
-its.it_value.tv_sec = 0;
-its.it_value.tv_nsec = 1;
+// start timed function timer capture, every 20 ms, offset is 1 second to
+// avoid "starvation" of the main thread by the capture thread (is started
+// every 20 ms and takes just a little bit then 20 ms to execute)
+its.it_value.tv_sec = 1;
+its.it_value.tv_nsec = 0;
 its.it_interval.tv_sec = 0;
 its.it_interval.tv_nsec = 20000000; // 20 ms = 20 million nanoseconds
 
 ret=timer_settime(timerid, 0, &its, NULL);
+
 if (ret < 0) {
 	fprintf(stderr,"error in timer_settime timer: function capture!\n");
 	exit(-1);
@@ -246,8 +262,6 @@ if (ret < 0) {
 // this is to avoid it begin interrupted by the "capture" application
 // start thread to process received audio
 pthread_create(&thr_processaudio, NULL, funct_processaudio, (void *) &global);
-
-
 
 // OK, we are done. Both subthreads are started. We can now retire.
 

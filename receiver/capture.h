@@ -10,6 +10,7 @@
 
 // version 20111107: initial release
 // version 20111109: add input from file
+// version 20111112: add stereo
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -31,6 +32,27 @@ int rc;
 int nextbuffer;
 char *p;
 
+static int init=0;
+
+static int octetpersample;
+static int channel;
+static int buffermask;
+
+
+if (!(init)) {
+	init=1;
+
+	if (global.stereo) {
+		octetpersample=4;
+		channel=2;
+		buffermask=0x7f; // 128 buffers : 0x00 to 0x7f
+	} else {
+		octetpersample=2;
+		channel=1;
+		buffermask=0xff; // 256 buffers : 0x00 to 0xff
+	}; // end else - if
+}; // end if init
+
 // Function_capture is started automatically every 20 ms; so there
 // is a risk that the earlier instance is still running
 // break of if that is the case
@@ -47,8 +69,10 @@ if (global.audioread) {
 // make thread as running
 global.audioread=1;
 
+
+///////////////////
+//// READ FROM FILE 
 if (global.fileorcapture) {
-	// READ FROM FILE
 
 	// exit if file completely read
 	if (feof(global.filein)) {
@@ -63,7 +87,7 @@ if (global.fileorcapture) {
 
 	
 	// do we have some place to store the audio?
-	nextbuffer = (global.pntr_capture +1) & 0xFF;
+	nextbuffer = (global.pntr_capture +1) & buffermask;
 
 	while ((nextbuffer != global.pntr_process) && !(stop)) {
 		int32_t average;
@@ -74,7 +98,7 @@ if (global.fileorcapture) {
 
 		// OK, we have place to store it
 
-		rc=fread(p, sizeof(int16_t), 960, global.filein);
+		rc=fread(p, octetpersample, 960, global.filein);
 
 		if (rc < 960) {
 			// less then 960 samples read.
@@ -112,8 +136,9 @@ if (global.fileorcapture) {
 			pointer= (int16_t *)p;
 
 			for (loop=0;loop<rc;loop++) {
-			average += abs(*pointer);
-				pointer += sizeof(int16_t);
+				average += abs(*pointer);
+				pointer += channel;
+
 			}; // end for
 
 			// bitshift right 10 = divide by 1024 (is faster then division)
@@ -129,7 +154,7 @@ if (global.fileorcapture) {
 		global.pntr_capture=nextbuffer;
 
 		// do we still have more place to store the next audio frame?
-		nextbuffer = (global.pntr_capture +1) & 0xFF;
+		nextbuffer = (global.pntr_capture +1) & buffermask;
 	}; // end whille
 
 // DONE
@@ -139,9 +164,11 @@ global.audioread=0;
 
 return;
 };
+/// END OF part "READ FROM FILE"
 
 
 
+///////////////////
 // CAPTURE FROM ALSA AUDIO DEVICE
 
 p=global.buffer[global.pntr_capture];
@@ -163,7 +190,7 @@ if (rc == -EPIPE) {
 };
 
 // do we have some place to store the audio?
-nextbuffer = (global.pntr_capture +1) & 0xFF;
+nextbuffer = (global.pntr_capture +1) & buffermask;
 
 
 if (global.pntr_process == nextbuffer) {
@@ -191,7 +218,7 @@ if (global.pntr_process == nextbuffer) {
 
 		for (loop=0;loop<rc;loop++) {
 		average += abs(*pointer);
-			pointer += sizeof(int16_t);
+		pointer += channel;
 		}; // end for
 
 		// bitshift right 10 = divide by 1024 (is faster then division)

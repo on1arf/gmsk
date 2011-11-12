@@ -31,8 +31,14 @@ snd_pcm_hw_params_set_access(global.handle, params, SND_PCM_ACCESS_RW_INTERLEAVE
 /* Signed 16-bit little-endian format */
 snd_pcm_hw_params_set_format(global.handle, params, SND_PCM_FORMAT_S16_LE);
 
-/* One channel (mono) */
-snd_pcm_hw_params_set_channels(global.handle, params, 1);
+
+/* number of channels */
+if (global.stereo) {
+	snd_pcm_hw_params_set_channels(global.handle, params, 2);
+} else {
+	snd_pcm_hw_params_set_channels(global.handle, params, 1);
+}; // end else - if
+
 
 /* 48 Khz sampling rate */
 val=RATE;

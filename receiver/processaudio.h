@@ -6,6 +6,7 @@
 
 // version 20111107: initial release
 // version 20111110: read from file, dump bits, dump amplitude
+// version 20111112: support for stereo files
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -73,6 +74,10 @@ FILE  * fileout=NULL;
 
 uint16_t streamid;
 
+int16_t *samplepointer;
+int channel;
+int buffermask;
+
 
 globaldatastr * p_global;
 p_global=(globaldatastr *) globaldatain;
@@ -91,6 +96,18 @@ str_dvframe dvframe;
 state=0;
 syncreceived=0;
 last2octets=0;
+
+
+// precalculate values to avoid having to do the calculation every
+// itteration
+if (global.stereo) {
+	channel=2;
+	buffermask=0x7f;
+} else {
+	channel=1;
+	buffermask=0xff;
+}; // end if
+
 
 // set to -1, will be increase before first use
 filecount=-1;
@@ -127,7 +144,8 @@ dvframe.dataorvoice=0x20;
 dvframe.unknown2[0]=0x00; dvframe.unknown2[1]=0x01; dvframe.unknown2[2]=0x01; 
 
 
-// init thisfileend
+// init thisfileend. For ALSA capturing, there is no file ending; so we
+// just thread this as a endless file
 thisfileend=0;
 
 // endless loop;
@@ -137,7 +155,7 @@ while (!(thisfileend)) {
 
 	// check the next buffer slot. If the "capture" process is using it, we do not have any
 	// audio available. -> wait and try again
-	nextbuffer=(p_global->pntr_process + 1) & 0xFF;
+	nextbuffer=(p_global->pntr_process + 1) & buffermask;
 
 	if (p_global->pntr_capture == nextbuffer) {
 		// nothing to process: sleep for 1/4 ms
@@ -159,12 +177,21 @@ while (!(thisfileend)) {
 		printf("(%04X)",p_global->audioaverage[thisbuffer]);
 	}; // end if
 
+	samplepointer=audiobuffer;
 	for (sampleloop=0; sampleloop <thisbuffersize; sampleloop++) {
-		audioin=audiobuffer[sampleloop];
+		// read audio:
+
+
+		// For mono: read mono channel
+		// For stereo: read left channel
+		audioin=*samplepointer;
+
+		//move up pointer one (mono) or two (stereo). 
+		samplepointer += channel;
+
 
 
 		bit=demodulate(audioin);
-//fprintf(stderr,"%d %04X %d\n",audioin, audioin,bit);
 
 		// the demodulate function returns three possible values:
 		// -1: not a valid bit
@@ -174,7 +201,6 @@ while (!(thisfileend)) {
 			// not a valid bit
 			continue;
 		}; // end if
-
 
 		// "State" variable:
 		// state 0: waiting for sync "10101010 1010101" (bit sync) or
@@ -571,6 +597,7 @@ while (!(thisfileend)) {
 
 
 }; // end while (for capture: endless loop; for file: EOF)
+
 
 
 /// end program

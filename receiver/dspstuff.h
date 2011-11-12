@@ -169,10 +169,18 @@ if (init) {
 
 filterret=firfilter(audioin);
 
-if (filterret > 0) {
-	bit=1;
+if (global.invert) {
+	if (filterret > 0) {
+		bit=0;
+	} else {
+		bit=1;
+	}; // end else - if
 } else {
-	bit=0;
+	if (filterret > 0) {
+		bit=1;
+	} else {
+		bit=0;
+	}; // end else - if
 }; // end else - if
 
 
