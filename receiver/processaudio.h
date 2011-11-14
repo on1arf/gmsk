@@ -349,6 +349,7 @@ while (!(thisfileend)) {
 				gettimeofday(&now,&tz);
 				srand(now.tv_usec);
 				streamid=rand() & 0xffff;
+
 				configframe.streamid=streamid;
 				dvframe.streamid=streamid;
 
@@ -559,6 +560,9 @@ while (!(thisfileend)) {
 
 				// close file
 				fclose(fileout);
+
+				// reset filesize
+				filesize=0;
 
 				continue;
 			} else if (octetposition == 12) {
