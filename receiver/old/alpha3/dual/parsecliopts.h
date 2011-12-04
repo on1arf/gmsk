@@ -14,15 +14,10 @@ global.dumpstream=0;
 global.dumpaverage=0;
 global.invert=0;
 global.stereo=0;
-global.udpport=0;
-global.udphost=NULL;
-global.verboselevel=0;
-global.ipv4only=0;
-global.ipv6only=0;
 
 
 // usage:
-// receiver [-d] [-dd] [-da] [-i] [-s] {-a alsadevice | -f filein} { fileout | -u udphost:udpport }
+// receiver [-d] [-dd] [-da] [-i] [-s] {-a alsadevice | -f filein} fileout
 // known options
 
 for (paramloop=1; paramloop <argc; paramloop++) {
@@ -41,28 +36,6 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 			paramloop++;
 			global.capturedevice=argv[paramloop];
 			global.fileorcapture=0;
-		}; // end if
-	} else if (strcmp(thisarg,"-u") == 0) {
-		// -u udphost:udpport
-
-
-		// is there a next argument?
-		if (paramloop+2 < argc ) {
-			paramloop++;
-			
-			global.udphost=argv[paramloop];
-
-			paramloop++;
-			global.udpport=atoi(argv[paramloop]);
-
-			if ((global.udpport <= 0) || (global.udpport > 65535)) {
-				snprintf(retmsg,160,"Error: portnumber must be between 1 and 65535\n");
-				return(-1);
-			}; // end if
-
-		} else {
-			snprintf(retmsg,160,"Error: -u needs two additional arguments: host and port\n");
-			return(-1);
 		}; // end if
 	} else if (strcmp(thisarg,"-f") == 0) {
 		// -f: file name
@@ -98,15 +71,6 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 	} else if (strcmp(thisarg,"-s") == 0) {
 		// -s: stereo
 		global.stereo=1;
-	} else if (strcmp(thisarg,"-v") == 0) {
-		// -v: verbose
-		global.verboselevel++;
-	} else if (strcmp(thisarg,"-4") == 0) {
-		// -4: ipv4 only
-		global.ipv4only=1;
-	} else if (strcmp(thisarg,"-6") == 0) {
-		// -6: ipv6 only
-		global.ipv6only=1;
 	} else {
 		// last option: output file name
 
@@ -125,17 +89,12 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 // Done all parameters. Check if we have sufficient parameters
 
 if (global.fileorcapture == -1) {
-	snprintf(retmsg,160,"Error: input source missing.\nUsage: receiver [-v] [-4 | -6] [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} {outputfilename | -u udphost udpport}\n");
+	snprintf(retmsg,160,"Error: input source missing.\nUsage: receiver [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} outputfilename\n");
 	return(-1);
 }; // end if
 
-if ((global.ipv4only) && (global.ipv6only)){
-	snprintf(retmsg,160,"Error: IPv4-only and IPv6-only are mutually exclusive\n");
-	return(-1);
-}; // end if
-
-if ((!(global.fnameout)) && (!(global.udpport))) {
-	snprintf(retmsg,160,"Error: output filename or udp host/port missing.\nUsage: receiver [-v] [-4 | -6] [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} {outputfilename | -u udphost udpport}\n");
+if (!(global.fnameout)) {
+	snprintf(retmsg,160,"Error: output file missing.\nUsage: receiver [-i] [-d] [-dd] [-da] [-s] {-a alsadevice | -f inputfilename} outputfilename\n");
 	return(-1);
 }; // end if
 

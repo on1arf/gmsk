@@ -7,6 +7,8 @@
 // version 20111107: initial release
 // version 20111110: read from file, dump bits, dump amplitude
 // version 20111112: support for stereo files
+// version 20111130: end stream on signal drop. do not process noise data,
+//                   accept bits at startsync and descrable slow data
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -39,25 +41,29 @@ int16_t * audiobuffer;
 
 int bit, state;
 
-int bitcount, octetcount;
+int bitcount;
+int octetcount;
 int bitposition=0;
 int octetposition=0;
+int countnoiseframe=0; // number of frames not processed due to average audio level > noise
 
 int filesize;
 
+int hadtowait;
+
 uint16_t last2octets;
 int syncreceived;
-uint64_t last8octets=0;
+uint32_t last4octets=0;
 int radioheaderreceived=0;
 int radioheaderbuffer[660];
 int radioheaderbuffer2[660];
-char radioheader[41];
+unsigned char radioheader[41];
 
 int loop;
-int maxdiff;
 int ret;
 
 int endfound;
+int bitmatch;
 
 // time related
 struct timeval now;
@@ -78,6 +84,15 @@ int16_t *samplepointer;
 int channel;
 int buffermask;
 
+int udpsocket=0;
+
+// vars to calculate "maximum audio level" for a valid stream (i.e. no noise)
+int maxaudiolevelvalid=0;
+int framesnoise=0;
+
+// temp values to calculate maximum audio level
+int64_t maxaudiolevelvalid_total=0;
+int maxaudiolevelvalid_numbersample=0;
 
 globaldatastr * p_global;
 p_global=(globaldatastr *) globaldatain;
@@ -87,10 +102,6 @@ str_dvtoolheader dvtoolheader;
 str_configframe configframe;
 str_dvframe dvframe;
 
-
-// tempory buffer for slowdata
-// to be added later. (slowdata needs to be descrambled)
-//char slowdatain[3];
 
 // init vars
 state=0;
@@ -109,13 +120,26 @@ if (global.stereo) {
 }; // end if
 
 
+
+if (p_global->udpsockaddr) {
+	// create UDP socket
+	udpsocket=socket(AF_INET6,SOCK_DGRAM,0);
+
+	if (udpsocket < 0) {
+		fprintf(stderr,"Error: coumd not create UDP socket. Shouldn't happen!\n");
+		exit(-1);
+	}; // end if
+}; // end if
+
+
 // set to -1, will be increase before first use
 filecount=-1;
 
-if (!(p_global->fnameout)) {
-	fprintf(stderr,"Error: no output filename!\n");
+if ((!(p_global->fnameout)) && (!(p_global->udpsockaddr))){
+	fprintf(stderr,"Error: no output filename or udphost:udpport!\n");
 	exit(-1);
 }; // end if
+
 
 // fill in dvtool header
 memcpy(&dvtoolheader.headertext,"DVTOOL",6);
@@ -124,6 +148,8 @@ dvtoolheader.filesize=0;
 
 // init var
 filesize=0;
+countnoiseframe=0;
+hadtowait=0;
 
 
 // fill in configframe structure, as much as possible
@@ -158,8 +184,11 @@ while (!(thisfileend)) {
 	nextbuffer=(p_global->pntr_process + 1) & buffermask;
 
 	if (p_global->pntr_capture == nextbuffer) {
-		// nothing to process: sleep for 1/4 ms
+		// nothing to process: sleep for 1/4 of ms (= 5 ms)
 		usleep((useconds_t) 250);
+
+		// set "had to wait" marker
+		hadtowait=1;
 		continue;
 	};
 
@@ -171,16 +200,77 @@ while (!(thisfileend)) {
 
 	if (global.fileorcapture) {
 		thisfileend=p_global->fileend[thisbuffer];
+		p_global->pntr_process = nextbuffer;
 	}; // end if
 
+
+
+	// things to do at the beginning of every block of data
+
+	// dump average if requested
 	if (global.dumpaverage) {
 		printf("(%04X)",p_global->audioaverage[thisbuffer]);
 	}; // end if
 
+
+	// do we process the audio ?
+	// if state is 0 (waiting for sync), and input audio-level is to high
+	// (i.e. received signal is noise), we skip the complete frame
+	if ((state == 0) && (maxaudiolevelvalid) && (p_global->audioaverage[thisbuffer] > maxaudiolevelvalid)) {
+		// skip audio frame
+
+		// how many frames did we already skip?
+		countnoiseframe++;
+
+		// if to much (more then 900 seconds), clear "maxaudiolevel", just to be sure
+		if (countnoiseframe > MAXNOISEREJECT) {
+			maxaudiolevelvalid=0;
+		}; // end if
+
+		// sleep for 10 ms (half of one audiosample), only when reading from ALSA device
+		// and we have he "had to wait" marker set
+
+		if ((hadtowait) && (p_global->fileorcapture == 0)) {	
+			usleep((useconds_t) 10000);
+		}; // end if
+
+		// reset "had to wait"
+		hadtowait=0;
+	
+		// go to next audio frame
+		p_global->pntr_process = nextbuffer;
+		continue;
+	};
+
+	// reset countnoiseframe
+	countnoiseframe=0;
+
+	// reset "had to wait" flag
+	hadtowait=0;
+
+
+	// when receiving header (state is 1), add up audio-level data to calculate
+	// maxaudiolevel when header completely received
+
+	if (state == 1) {
+		maxaudiolevelvalid_total += p_global->audioaverage[thisbuffer];
+		maxaudiolevelvalid_numbersample++;
+	}; // end if
+
+	// when receiving data frame (state is 2), just count number of consequent audiolevels
+	if (state == 2) {
+		if ((maxaudiolevelvalid) && (p_global->audioaverage[thisbuffer] > maxaudiolevelvalid)) {
+			framesnoise++;
+		} else {
+			framesnoise=0;
+		}; // end else - if
+	}; // end if
+
+	// process buffer
+
 	samplepointer=audiobuffer;
 	for (sampleloop=0; sampleloop <thisbuffersize; sampleloop++) {
 		// read audio:
-
 
 		// For mono: read mono channel
 		// For stereo: read left channel
@@ -188,7 +278,6 @@ while (!(thisfileend)) {
 
 		//move up pointer one (mono) or two (stereo). 
 		samplepointer += channel;
-
 
 
 		bit=demodulate(audioin);
@@ -222,7 +311,10 @@ while (!(thisfileend)) {
 
 			if (syncreceived > 20) {
 			// start looking for frame sync if we have received sufficient bitsync
-				if ((last2octets & 0x7FFF) == 0x7650) {
+			// we accept up to "BITERROR START SYN" penality points for errors
+				bitmatch=countdiff16(last2octets,0x7FFF,15,0x7650,BITERRORSSTARTSYN);
+
+				if (bitmatch) {
 					// OK, we have a valid frame sync, go to state 1
 					state=1;
 					radioheaderreceived=0;
@@ -233,17 +325,22 @@ while (!(thisfileend)) {
 					}; // end if
 					printbit(-1,0,0,0);
 
+					// store first data of audiolevel to calculate average
+					maxaudiolevelvalid_total=p_global->audioaverage[thisbuffer];
+					maxaudiolevelvalid_numbersample=1;
 
-					// go to next frame
+					// go to next bit
 					continue;
 				}; // end if
 			}; 
 
-			if (last2octets == 0x5555) {
+			// according the specifications, the syncronisation pattern is 64 times "0101", however there also
+			// seams to be cases where the sequence "1111" is send.
+			if ((last2octets == 0x5555) || (last2octets == 0xffff)) {
 				syncreceived += 3;
 			} else {
 				if (syncreceived > 0) {
-					syncreceived -= 1;
+					syncreceived--;
 				}; // end if
 			}; 
 
@@ -262,6 +359,13 @@ while (!(thisfileend)) {
 
 			if (radioheaderreceived >= 660) {
 				int len;
+
+				// OK, we have received all 660 bits of the header
+				// calculate average audio level
+				// if we receive a frame with an average value more then 40% over
+				// that, it is concidered noise
+				maxaudiolevelvalid = (1.2 * maxaudiolevelvalid_total) / maxaudiolevelvalid_numbersample;
+
 
 				scramble(radioheaderbuffer,radioheaderbuffer2);
 				deinterleave(radioheaderbuffer2,radioheaderbuffer);
@@ -311,7 +415,7 @@ while (!(thisfileend)) {
 				printf("YOUR : %c%c%c%c%c%c%c%c \n",radioheader[19],radioheader[20],radioheader[21],radioheader[22],radioheader[23],radioheader[24],radioheader[25],radioheader[26]);
 				printf("MY   : %c%c%c%c%c%c%c%c/%c%c%c%c \n",radioheader[27],radioheader[28],radioheader[29],radioheader[30],radioheader[31],radioheader[32],radioheader[33],radioheader[34], radioheader[35], radioheader[36], radioheader[37], radioheader[38]);
 		
-				FCSinheader=((radioheader[39] << 8) | radioheader[40]) & 0xFFFF; 	
+				FCSinheader=((radioheader[39] << 8) | radioheader[40] ) & 0xFFFF; 	
 				FCScalculated=calc_fcs((unsigned char *) radioheader,39);
 				printf("Check sum = %04X ",FCSinheader);
 
@@ -324,25 +428,28 @@ while (!(thisfileend)) {
 				filecount++;
 
 
+				// do we output to files ???
+				if (p_global->fnameout) {
+					// open file for output
+					snprintf(fnamefull,160,"%s-%04d.dvtool",p_global->fnameout,filecount);
 
-				// open file for output
-				snprintf(fnamefull,160,"%s-%04d.dvtool",p_global->fnameout,filecount);
+					fileout=fopen(fnamefull, "w");
 
-				fileout=fopen(fnamefull, "w");
+					if (!fileout) {
+						fprintf(stderr,"Error: output file %s could not be opened!\n",fnamefull);
+						exit(-1);
+					}; // end if
 
-				if (!fileout) {
-					fprintf(stderr,"Error: output file %s could not be opened!\n",fnamefull);
-					exit(-1);
+					
+					// write DVtool header (initialised above)
+					ret=fwrite(&dvtoolheader,10,1,fileout);
+					if (ret != 1) {
+						fprintf(stderr,"Error: cannot write DVtool header to file %s\n",fnamefull);
+						exit(-1);
+					}; // end if
 				}; // end if
 
-
-
-				// write DVtool header (initialised above)
-				ret=fwrite(&dvtoolheader,10,1,fileout);
-				if (ret != 1) {
-					fprintf(stderr,"Error: cannot write DVtool header to file %s\n",fnamefull);
-					exit(-1);
-				}; // end if
+				// note, the 10 octets written above are only used in files, not in UDP streams
 
 				// init vars
 				// streamid a 2 byte random number
@@ -365,19 +472,36 @@ while (!(thisfileend)) {
 
 
 
-				// write DVtool header (initialised above)
-				ret=fwrite(&configframe,58,1,fileout);
-				if (ret != 1) {
-					fprintf(stderr,"Error: cannot write configframe to file %s\n",fnamefull);
-					exit(-1);
-				}; // end if
-				
+				// do we output to files ?
+				if (p_global->fnameout) {
+					// write DVtool header (initialised above)
+					ret=fwrite(&configframe,58,1,fileout);
+					if (ret != 1) {
+						fprintf(stderr,"Error: cannot write configframe to file %s\n",fnamefull);
+						exit(-1);
+					}; // end if
+				};
+
+				if (p_global->udpsockaddr) {
+				// send UDP frame
+				// start at "headertext" (i.e. do not send 2 "length" indication octets)
+					ret=sendto(udpsocket,&configframe.headertext,56,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+					if (ret < 0) {
+						// error
+						fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+					}; // end if
+				}; // end send UDP
 
 				state=2;
-				last8octets=0;
+
+				// reinit some vars
+				last4octets=0;
 
 				bitposition=0;
 				octetposition=0;
+
+				framesnoise=0;
 
 			}; // end if
 
@@ -387,22 +511,58 @@ while (!(thisfileend)) {
 		// state 2: main part of stream
 		if (state == 2) {
 			char marker=0;
-			int bitmatch;
 
 			bitposition++;
 			if (bitposition > 96) {
 				bitposition=1;
 			}; // end if
 
-			last8octets <<= 1;
+			last4octets <<= 1;
 			if (bit) {
-				last8octets |= 0x01;
+				last4octets |= 0x01;
 			}; // end if
 
 			// SYNC marker: 24 bits: 0101010101 1101000 1101000 
-			if ((last8octets & 0x00FFFFFF) == 0x00AAB468) {
-				marker='S';
+			// only look for it at the last position of every 21 frames
+			if ((framecount == 0) && (bitposition == 96)) {
+				if ((last4octets & 0x00FFFFFF) == 0x00AAB468) {
+					marker='S';
+				} else {
+					// SYNC marker missed
+					marker='M';
+				}; // end else - if
 			}; // end if
+
+			// solve bit slips: SYNC TO EARLY
+			if (((framecount == 0) && (bitposition == 95)) && ((last4octets & 0x00FFFFFF) == 0x00AAB468)) {
+				// error: found a SYNC marker but one position to early:
+
+				// invalidate frame
+				memset(&dvframe.ambe[0],0,9); // zap data
+				dvframe.slowspeeddata[0]=0xAA;
+				dvframe.slowspeeddata[1]=0xB4;
+				dvframe.slowspeeddata[2]=0x68;
+
+				// move up bitposition
+				bitposition=96;
+
+				// set "error" marker
+				marker='E';
+			}; // end if
+
+
+			// solve bit slips: SYNC TO LATE
+			if (((framecount == 1) && (bitposition == 1)) &&
+					((last4octets & 0x00FFFFFF) == 0x00AAB468)) {
+
+				// correct bitposition. Note: normally, bitposition goes from 1 to 96.
+				// By using 0, we create a special condition
+				bitposition=0;
+				
+				// set "error" marker
+				marker='E';
+			}; // end if
+
 
 			if (global.dumpstream >= 1) {
 				printbit(bit,6,2,marker);
@@ -410,22 +570,23 @@ while (!(thisfileend)) {
 
 
 			// store bits into 12 octet structure
-			if ((bitposition & 0x07) == 0x00) {
+			if ((bitposition) && ((bitposition & 0x07) == 0x00)) {
 				// bitposition is multiple of 8
 
 				// note, the bits in the .dvtool are left-right inverted
  
 				// octets 0 to 8 are DV
+				// octets 9 to 11 are SlowData
 
-//				if (octetposition <= 8) {
-					dvframe.ambe[octetposition]=(invertbits[(char)last8octets & 0xff]);
-//				} else {
-//					// octets 9 to 11 are data.
-//					// store these in tempory buffer ("slowdatain") as this data may need to be descrambled first
-//					slowdatain[octetposition-9]=(char)(last8octets & 0xff);
-//				}; // end else - if
+				// a small trick: in the dvframe structure, ambe only contains 9
+				// octets followed by "slowdata" structure of 3 octets
+				// By letting the index go from 0 to 11, we fill up both parts with
+				// just one index
+
+				dvframe.ambe[octetposition]=(invertbits[(char)last4octets & 0xff]);
 					
 				octetposition++;
+
 
 			}; // end if 
 
@@ -438,27 +599,16 @@ while (!(thisfileend)) {
 			// First, look for end-of-stream marker. If found, framecounter bit 6 is set to 1
 			endfound=0;
 
-			// END marker: 48 bits: 32 bit "sync" + "00010011 01011110"
-			// less stringent rules:
-			// instead of doing a "=", we do an "exor" and count the number of differences.
-			// This 48 bit pattern is found in the data-part of the last frame + 24 bits after that
+			// END marker: accroding to the specifications: 48 bits: 32 bit "sync" + "00010011 01011110"
+			// however, it has been noticed that some transceivers do not send out the full pattern
+			// but only the 24 bit sync ("10") pattern at the end of the frame
 
-			// so we do this check at position 24, or two bits before or after that
+			// additional check, if two or more consecutive frames with high average audio level 
+			// (i.e. noise), also stop 
 
-			if ((bitposition >= 22) && (bitposition <= 26)) {
-				if ((bitposition == 26) || (bitposition == 22)) {
-					maxdiff=0; // 2 * 2
-				} else if ((bitposition == 25) || (bitposition == 23)) {
-					maxdiff=2; // 1 * 2
-				} else {
-					// bit position 24
-					maxdiff=6;
-				}; // else - elseif - if
+			if (bitposition == 96) {
+				if ((last4octets & 0x00FFFFFF) == 0xAAAAAA){
 
-				bitmatch=countdiff64(last8octets,0xFFFFFFFFFFFFLL,48,0xAAAAAAAA135ELL,maxdiff);
-
-				if (bitmatch) {
-				// we have a match
 					printf("END.\n\n\n");
 
 					// re-init
@@ -467,8 +617,7 @@ while (!(thisfileend)) {
 					state=0;
 
 					// the end-marker is just a fake pattern and does not contain any
-					// real audio -> Zap frame
-					memset(dvframe.ambe,0,9);
+					// data -> Zap slow data part
 					dvframe.slowspeeddata[0]=0xAA;
 					dvframe.slowspeeddata[1]=0xB4;
 					dvframe.slowspeeddata[2]=0x68;
@@ -477,39 +626,40 @@ while (!(thisfileend)) {
 					printbit(-1,0,0,0);
 
 					endfound=1;
-				}; // end if
-			}; // end if (bitposition between 22 and 26)
-
-
-			// additional "END" checks:
-			// data-field containing all "0" or all "1"
-			// data-field containing all "01" or "10"
-			if (bitposition == 96) {
-				uint32_t datapart; // datapart is 3 octets
-
-				datapart=(last8octets & 0xFFFFFF);
-
-				if ((datapart == 0) || (datapart == 0xFFFFFF) || (datapart == 0x555555) ) {
-					printf("EXIT.\n\n\n");
+				} else if (framesnoise >= 1) {
+					printf("CARRIER DROPPED!\n\n\n");
 
 					// re-init
 					syncreceived=0;
 					last2octets=0;
 					state=0;
 
-					// reset counters of printbit function
-					printbit(-1,0,0,0);
-
 					// the end-marker is just a fake pattern and does not contain any
-					// real audio ->  zap contents of frame
-					memset(dvframe.ambe,0,9);
+					// data -> Zap slow data part
+					memset(&dvframe.ambe[0],0,9); // zap data
 					dvframe.slowspeeddata[0]=0xAA;
 					dvframe.slowspeeddata[1]=0xB4;
 					dvframe.slowspeeddata[2]=0x68;
 
+					// reset counters of printbit function
+					printbit(-1,0,0,0);
+
 					endfound=1;
-				}; // end if
-			}; // end if
+				} else {
+
+					// not END, scramble slow-speed data, except for frames number 0 (i.e. first
+					// frame of stream + every 20 frames after that) as these frames contain
+					// sync frames instead of data
+					if (framecount != 0) {
+						dvframe.slowspeeddata[0] ^= 0x70;
+						dvframe.slowspeeddata[1] ^= 0x4f;
+						dvframe.slowspeeddata[2] ^= 0x93;
+					}; // end if
+
+				}; // end else - elsif - if
+
+			}; // end if (bitposition 96)
+
 
 			// all checks done.
 			// do we need to save a frame to file?
@@ -530,36 +680,51 @@ while (!(thisfileend)) {
 				octetposition=0; bitposition=0;
 
 
-				// write frame to file
-				ret=fwrite(&dvframe,29,1,fileout);
-				if (ret != 1) {
-					fprintf(stderr,"Error: cannot write dvframe %d (last frame of stream) to file %s\n",framecount,fnamefull);
-					exit(-1);
-				}; // end if
-				filesize++;
+				// do we output to files ?
+				if (p_global->fnameout) {
+
+					// write frame to file
+					ret=fwrite(&dvframe,29,1,fileout);
+					if (ret != 1) {
+						fprintf(stderr,"Error: cannot write dvframe %d (last frame of stream) to file %s\n",framecount,fnamefull);
+						exit(-1);
+					}; // end if
+					filesize++;
 
 
-				// now move back to the beginning of the dvtool file.
-				// rewrite header + filesize
-				ret=fseek(fileout,0,SEEK_SET);
-				if (ret) {
-					fprintf(stderr,"Error: cannot rewind to position 0 in file %s\n",fnamefull);
-					exit(-1);
-				}; // end if
+					// now move back to the beginning of the dvtool file.
+					// rewrite header + filesize
+					ret=fseek(fileout,0,SEEK_SET);
+					if (ret) {
+						fprintf(stderr,"Error: cannot rewind to position 0 in file %s\n",fnamefull);
+						exit(-1);
+					}; // end if
 
 
-				// write size
-				// write DVtool header (initialised above)
-				dvtoolheader.filesize=filesize;
+					// write size
+					// write DVtool header (initialised above)
+					dvtoolheader.filesize=filesize;
 
-				ret=fwrite(&dvtoolheader,10,1,fileout);
-				if (ret != 1) {
-					fprintf(stderr,"Error: cannot rewrite DVtool header to file %s\n",fnamefull);
-					exit(-1);
-				}; // end if
+					ret=fwrite(&dvtoolheader,10,1,fileout);
+					if (ret != 1) {
+						fprintf(stderr,"Error: cannot rewrite DVtool header to file %s\n",fnamefull);
+						exit(-1);
+					}; // end if
 
-				// close file
-				fclose(fileout);
+					// close file
+					fclose(fileout);
+				}; // end if 
+				
+				if (p_global->udpsockaddr) {
+				// send UDP frame
+				// start at "headertext" (i.e. do not send 2 "length" indication octets)
+					ret=sendto(udpsocket,&dvframe.headertext,27,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+					if (ret < 0) {
+						// error
+						fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+					}; // end if
+				}; // end if (send UDP)
 
 				// reset filesize
 				filesize=0;
@@ -573,13 +738,28 @@ while (!(thisfileend)) {
 				// set framecounter
 				dvframe.framecounter=framecount;
 
-				// write frame to file
-				ret=fwrite(&dvframe,29,1,fileout);
-				if (ret != 1) {
-					fprintf(stderr,"Error: cannot write dvframe %d to file %s\n",framecount,fnamefull);
-					exit(-1);
+				// do we output to files ?
+				if (p_global->fnameout) {
+					// write frame to file
+					ret=fwrite(&dvframe,29,1,fileout);
+					if (ret != 1) {
+						fprintf(stderr,"Error: cannot write dvframe %d to file %s\n",framecount,fnamefull);
+						exit(-1);
+					}; // end if
+					filesize ++;
 				}; // end if
-				filesize ++;
+
+
+				if (p_global->udpsockaddr) {
+				// send UDP frame
+				// start at "headertext" (i.e. do not send 2 "length" indication octets)
+					ret=sendto(udpsocket,&dvframe.headertext,27,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+					if (ret < 0) {
+						// error
+						fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+					}; // end if
+				}; // end if (send UDP)
 
 
 				// increase framecounter for next frame

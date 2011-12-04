@@ -19,22 +19,20 @@
  */
 
 
-// DEFINEs
-// GLOBAL PARAMETERS
-
-#define MAXNOISEREJECT 45000	// maximum noise samples (amplitude > noise amplitude)
-										// that may be ignored 
-#define BITERRORSSTARTSYN 2	// number of biterrors accepted in "START" syn pattern
-										// note, this is a "penalty".
-										// 2 means either 1 bit wrong
-
 // global data structure definition
 typedef struct {
-char *buffer[256];
-int buffersize[256];
-int audioaverage[256];
-int fileend[256];
-int pntr_capture, pntr_process;
+char *int_buffer[256];
+int int_buffersize[256];
+int int_audioaverage[256];
+int int_fileend[256];
+
+char *float_buffer[256];
+int float_buffersize[256];
+int float_audioaverage[256];
+int float_fileend[256];
+
+int pntr_int_capture, pntr_int_process;
+int pntr_float_capture, pntr_float_process;
 int fileorcapture; // 0 = capture, 1 = file
 FILE * filein;
 char * fnamein;
@@ -43,16 +41,10 @@ snd_pcm_t *handle;
 snd_pcm_uframes_t frames;
 int audioread;
 char * fnameout;
-char * udphost;
-int udpport;
 int dumpstream;
 int dumpaverage;
 int invert;
 int stereo;
-int verboselevel;
-int ipv4only;
-int ipv6only;
-struct sockaddr_in6 * udpsockaddr;
 } globaldatastr;
 
 // global data structure itself

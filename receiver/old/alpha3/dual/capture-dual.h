@@ -12,6 +12,8 @@
 // version 20111109: add input from file
 // version 20111112: add stereo
 
+// version 20111113: DUAL version (process same stream with integers and floats)
+
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
  *
@@ -29,8 +31,8 @@
 static void funct_capture (int sig) {
 int errorcount=0;
 int rc;
-int nextbuffer;
-char *p;
+int nextbuffer_int, nextbuffer_float;
+char *p_int, *p_float;
 
 static int init=0;
 
@@ -38,6 +40,9 @@ static int octetpersample;
 static int channel;
 static int buffermask;
 
+// now defined here (as shared by code for int and float)
+// used to be defined inside "if" statement below
+int32_t average=-1;
 
 if (!(init)) {
 	init=1;
@@ -62,8 +67,8 @@ if (global.audioread) {
 	// only print warning when capturing from audiodevice
 	if (global.fileorcapture == 0) {
 		putc('R',stderr);
+		return;
 	}; // end if
-	return;
 }; // end if
 
 // make thread as running
@@ -87,18 +92,25 @@ if (global.fileorcapture) {
 
 	
 	// do we have some place to store the audio?
-	nextbuffer = (global.pntr_capture +1) & buffermask;
 
-	while ((nextbuffer != global.pntr_process) && !(stop)) {
+	// we will wait until we can store BOTH the integer and the
+	// floating point data
+	nextbuffer_int = (global.pntr_int_capture +1) & buffermask;
+	nextbuffer_float = (global.pntr_float_capture +1) & buffermask;
+
+	while (((nextbuffer_int != global.pntr_int_process) && (nextbuffer_float != global.pntr_float_process)) && !(stop)) {
 		int32_t average;
 		int16_t *pointer;
 
-		p=global.buffer[global.pntr_capture];
+		p_int=global.int_buffer[global.pntr_int_capture];
+		p_float=global.float_buffer[global.pntr_float_capture];
 
 
 		// OK, we have place to store it
 
-		rc=fread(p, octetpersample, 960, global.filein);
+		// read data and store in "int" buffer
+		rc=fread(p_int, octetpersample, 960, global.filein);
+		memcpy(p_float,p_int,960*octetpersample);
 
 		if (rc < 960) {
 			// less then 960 samples read.
@@ -115,10 +127,12 @@ if (global.fileorcapture) {
 		}; // end  if
 
 		// store data
-		global.buffersize[global.pntr_capture]=rc;
+		global.int_buffersize[global.pntr_int_capture]=rc;
+		global.float_buffersize[global.pntr_float_capture]=rc;
 
 		if (eof) {
-			global.fileend[global.pntr_capture]=1;
+			global.int_fileend[global.pntr_int_capture]=1;
+			global.float_fileend[global.pntr_float_capture]=1;
 		}; // end if
 		
 
@@ -133,7 +147,7 @@ if (global.fileorcapture) {
 			int loop;
 
 			average=0;
-			pointer= (int16_t *)p;
+			pointer= (int16_t *)p_int;
 
 			for (loop=0;loop<rc;loop++) {
 				average += abs(*pointer);
@@ -145,16 +159,20 @@ if (global.fileorcapture) {
 			average >>= 10;
 
 			// store average
-			global.audioaverage[global.pntr_capture]=average;
+			global.int_audioaverage[global.pntr_int_capture]=average;
+			global.float_audioaverage[global.pntr_float_capture]=average;
 		} else {
-			global.audioaverage[global.pntr_capture]=0;
+			global.int_audioaverage[global.pntr_int_capture]=0;
+			global.float_audioaverage[global.pntr_float_capture]=0;
 		}; // end if
 
 		// set pointer forward
-		global.pntr_capture=nextbuffer;
+		global.pntr_int_capture=nextbuffer_int;
+		global.pntr_float_capture=nextbuffer_float;
 
 		// do we still have more place to store the next audio frame?
-		nextbuffer = (global.pntr_capture +1) & buffermask;
+		nextbuffer_int = (global.pntr_int_capture +1) & buffermask;
+		nextbuffer_float = (global.pntr_float_capture +1) & buffermask;
 	}; // end whille
 
 // DONE
@@ -171,10 +189,14 @@ return;
 ///////////////////
 // CAPTURE FROM ALSA AUDIO DEVICE
 
-p=global.buffer[global.pntr_capture];
+p_int=global.int_buffer[global.pntr_int_capture];
+p_float=global.float_buffer[global.pntr_float_capture];
 
 // read audio from ALSA device
-rc = snd_pcm_readi(global.handle, p, global.frames);
+rc = snd_pcm_readi(global.handle, p_int, global.frames);
+// copy data to float buffer
+memcpy(p_float,p_int,global.frames*octetpersample);
+
 
 if (rc == -EPIPE) {
 	/* EPIPE means overrun */
@@ -190,18 +212,19 @@ if (rc == -EPIPE) {
 };
 
 // do we have some place to store the audio?
-nextbuffer = (global.pntr_capture +1) & buffermask;
+nextbuffer_int = (global.pntr_int_capture +1) & buffermask;
+nextbuffer_float = (global.pntr_float_capture +1) & buffermask;
 
+average=-1;
 
-if (global.pntr_process == nextbuffer) {
+if (global.pntr_int_process == nextbuffer_int) {
 	// Oeps, playback is using the next buffer
 	// give error and do NOT increase pointer
-	putc('F',stderr);
+	putc('F',stderr); putc('I',stderr);
 } else {
-	int32_t average;
 	int16_t *pointer;
 
-	global.buffersize[global.pntr_capture]=rc;
+	global.int_buffersize[global.pntr_int_capture]=rc;
 
 	// calculate average of absolute value
 	// this will given an indication of the amplitude of the
@@ -214,7 +237,7 @@ if (global.pntr_process == nextbuffer) {
 		int loop;
 
 		average=0;
-		pointer= (int16_t *)p;
+		pointer= (int16_t *)p_int;
 
 		for (loop=0;loop<rc;loop++) {
 		average += abs(*pointer);
@@ -225,14 +248,64 @@ if (global.pntr_process == nextbuffer) {
 		average >>= 10;
 
 		// store average
-		global.audioaverage[global.pntr_capture]=average;
+		global.int_audioaverage[global.pntr_int_capture]=average;
 	} else {
-		global.audioaverage[global.pntr_capture]=0;
+		global.int_audioaverage[global.pntr_int_capture]=0;
 	}; // end if
 
 
 	// set pointer forward
-	global.pntr_capture=nextbuffer;
+	global.pntr_int_capture=nextbuffer_int;
+
+}; // end else - if
+
+
+// do the same thing for FLOATS
+// Note, now, we only calculate the average, if not yet done above
+
+if (global.pntr_float_process == nextbuffer_float) {
+	// Oeps, playback is using the next buffer
+	// give error and do NOT increase pointer
+	putc('F',stderr); putc('F',stderr);
+} else {
+	int16_t *pointer;
+
+	global.float_buffersize[global.pntr_float_capture]=rc;
+
+	// calculate average of absolute value
+	// this will given an indication of the amplitude of the
+	// received signal
+	// we only do this when we have 960 samples (as we are supposted to have)
+	// as we do not divide by 960 but by 1024 (shift right 10) as this is
+	// faster then division
+
+
+	if (rc == 960) {
+		int loop;
+
+		// calculate average only if not calculated above
+		if (average == -1) {
+			average=0;
+			pointer= (int16_t *)p_float;
+
+			for (loop=0;loop<rc;loop++) {
+				average += abs(*pointer);
+				pointer += channel;
+			}; // end for
+
+			// bitshift right 10 = divide by 1024 (is faster then division)
+			average >>= 10;
+		}; // end if (calculate average)
+
+		// store average
+		global.float_audioaverage[global.pntr_float_capture]=average;
+	} else {
+		global.float_audioaverage[global.pntr_float_capture]=0;
+	}; // end if
+
+
+	// set pointer forward
+	global.pntr_float_capture=nextbuffer_float;
 
 }; // end else - if
 

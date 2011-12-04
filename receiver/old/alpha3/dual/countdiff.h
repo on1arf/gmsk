@@ -46,11 +46,8 @@ int countdiff64(uint64_t data, uint64_t mask, int size, uint64_t target, int max
 	penalty=0;
 
 	for (loop=0;loop<size;loop++) {
-		// get rightmost bit
-		bit=diff & 0x01;
-
-		// move everything to the right for the next loop
 		diff >>= 1;
+		bit=diff & 0x01;
 
 		if (bit) {
 			// difference in bit found
@@ -78,69 +75,6 @@ int countdiff64(uint64_t data, uint64_t mask, int size, uint64_t target, int max
 	return(1);
 	
 }
-
-
-
-int countdiff16(uint16_t data, uint16_t mask, int size, uint16_t target, int maxdiff) {
-	int loop;
-	int bit, lastbit=0;
-	int penalty;
-
-	uint16_t diff;
-
-	// masked data
-	diff = (data & mask) ^ target;
-
-	// perhaps it is equal? if yes, return "true"
-	if (diff == 0) {
-		return(1);
-	}; // end if
-
-	// not equal, if maxdiff is zero, return "false"
-	if (maxdiff == 0) {
-		return(0);
-	}; // end if
-
-	penalty=0;
-
-	// just to be sure
-	if (size > 16) {
-		size=16;
-	}; // 
-
-	for (loop=0;loop<size;loop++) {
-		// check mostright "diff" bit
-		bit=diff & 0x01; 
-
-		// move all bits to the right (for the next loop)
-		diff >>= 1;
-
-		if (bit) {
-			// difference in bit found
-
-			// add 2 "diff-points" if bit by itself
-			// add 1 "diff-point" if bit more to the right was also 1
-
-			if (lastbit) {
-				penalty++;
-			} else {
-				penalty+=2;
-			}; // end if
-		}; // end if
-
-		lastbit=bit;
-
-		if (penalty > maxdiff) {
-		// we already have to much penalty points (over "maxdiff") -> return false
-			return(0);
-		}; // end if
-	}; // end for
-
-
-	// all bits, check, penalty is still less then maxdiff, return "true"
-	return(1);
-	
-}; // end function
 
 
 

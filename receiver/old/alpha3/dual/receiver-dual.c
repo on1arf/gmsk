@@ -28,6 +28,11 @@
  */
 
 
+// DUAL FILE VERSION
+// The goal of this application is to verify the quality of the
+// gmsk demodulation DSP code converted to integers
+// it produces two files: one using DSP code using integers and
+// a second one using floats
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,25 +62,15 @@
 // for memset
 #include <strings.h>
 
-// for Error Number
-#include <errno.h>
-
-// IP networking
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-
-#include <arpa/inet.h>
-
 // defines for timed interrupts
 #define CLOCKID CLOCK_REALTIME
 #define SIG SIGRTMIN
 
 // global data
-#include "global.h"
+#include "global-dual.h"
 
 // functions
-#include "dspstuff.h"
+#include "dspstuff-dual.h"
 #include "descramble.h"
 #include "fcs.h"
 
@@ -88,12 +83,11 @@
 #include "parsecliopts.h"
 #include "initalsa.h"
 #include "initinfile.h"
-#include "initsocket.h"
+
 
 // functions used by main program
-#include "capture.h"
-#include "processaudio.h"
-
+#include "capture-dual.h"
+#include "processaudio-dual.h"
 
 /////////////////////////////////////////
 /////////////////////////////////////////
@@ -122,8 +116,8 @@ struct itimerspec its;
 
 
 // threads
-pthread_t thr_processaudio;
-
+pthread_t thr_processaudio_int;
+pthread_t thr_processaudio_float;
 
 
 /////////////////////////////
@@ -155,7 +149,7 @@ if (global.fileorcapture == 0) {
 	exit(-1);
 }; // end else - elsif - if
 	
-// return message?
+
 if (retval < 0) {
 // -1: error
 	fprintf(stderr,"%s",retmsg);
@@ -164,28 +158,6 @@ if (retval < 0) {
 // +1: warning
 	fprintf(stderr,"%s",retmsg);
 }; // end elsif - if
-
-
-
-// init global vars for UDP streaming (just to be sure)
-global.udpsockaddr=NULL;
-
-retval=0;
-// for UDP stream, create socket and do DNS
-if ((global.udphost) && (global.udpport)) {
-	retval=init_udpsocket(retmsg);
-}; // end if
-
-// return message?
-if (retval < 0) {
-// -1: error
-	fprintf(stderr,"%s",retmsg);
-	exit(-1);
-} else if (retval > 0) {
-// +1: warning
-	fprintf(stderr,"%s",retmsg);
-}; // end elsif - if
-
 
 
 /////////////////////
@@ -212,20 +184,25 @@ if (global.fileorcapture == 0) {
 
 // create buffers
 for (loop=0;loop<numbuffer;loop++) {
-	global.buffer[loop] = (char *) malloc(size);
+	global.int_buffer[loop] = (char *) malloc(size);
+	if (global.int_buffer[loop] == NULL) {
+		fprintf(stderr,"Error: could not allocate memory for buffer INT %d\n",loop);
+		exit(-1);
+	}; // end if
 
-	if (global.buffer[loop] == NULL) {
-		fprintf(stderr,"Error: could not allocate memory for buffer %d\n",loop);
+	global.float_buffer[loop] = (char *) malloc(size);
+	if (global.float_buffer[loop] == NULL) {
+		fprintf(stderr,"Error: could not allocate memory for buffer FLOAT %d\n",loop);
 		exit(-1);
 	}; // end if
 
 	// init fileend
-	global.fileend[loop]=0;
+	global.int_fileend[loop]=0; global.float_fileend[loop]=0;
 }; // end for
 
 // init buffer pointers
-global.pntr_capture=0;
-global.pntr_process=numbuffer-1;
+global.pntr_int_capture=0; global.pntr_float_capture=0;
+global.pntr_int_process=numbuffer-1; global.pntr_float_process=numbuffer-1;
 
 
 
@@ -294,8 +271,12 @@ if (ret < 0) {
 
 // processing of received audio is done on seperate thread
 // this is to avoid it begin interrupted by the "capture" application
-// start thread to process received audio
-pthread_create(&thr_processaudio, NULL, funct_processaudio, (void *) &global);
+
+// start thread to process received audio (INTEGER)
+pthread_create(&thr_processaudio_int, NULL, funct_processaudio_int, (void *) &global);
+
+// start thread to process received audio (FLOAT)
+pthread_create(&thr_processaudio_float, NULL, funct_processaudio_float, (void *) &global);
 
 // OK, we are done. Both subthreads are started. We can now retire.
 
