@@ -1,0 +1,89 @@
+***************************************************
+** GMSK sender:  demonstration code and educational toolkit
+
+
+** RUNNING the application.
+
+The current implementation of the gmsk sender ("20111213 release")
+should be concider "alpha" code of an application in development.
+
+Althou it can already be used to experiment with transmitting
+gmsk-streams, it is far from a finished product.
+
+
+** How to use it:
+- convert .dvtool file to RAW PCM audio-file (as described below)
+- convert RAW pcm audio-file to .WAV audio-file (as described below)
+- play out audio-file to 9k6 audio-port of FM-transceiver
+- manually activate PTT on radio by grounding the "PTT" pin on the
+9k6 audio port of FM-transceiver.
+
+
+*** Usage
+Usage: gmsksender [-h] [-v] [-r] [-s] [-z] [-i] -f infile.dvtool outfile.raw
+
+Basic functionality:
+
+- gmskserver infile.dvtool outfile.raw
+Convert a .dvtool file to a wav-file to be transmitted over the 9k6 port of
+a FM-transceiver.
+
+
+
+*** Options:
+-h: help
+-v: verbose
+
+-r: raw input file: file is in "raw" format (in contrast to .dvtool files)
+Note: this option is not yet implemented
+
+-s: resyncronise input file: re-insert syncronisation patterns every 21 frames, as
+specified by D-STAR specification
+
+-z: zap slow-data: delete slow-data from input file
+
+-i: invert: needed for audio-devices that invert the outgoing signal (as needed on
+some audio devices)
+
+
+*** Conversion:
+
+In the current implementation of the "gmsksender", the output audio-file is
+formatted in RAW PCM format (48KHz sampling, 16 bit little-endian, MONO).
+As raw PCM files do not contain a header, most application are not able to process
+these files.
+
+To convert a raw PCM file into a .wav file, the following command can be used:
+sox -c 1 -r 48000 -2 -e signed-integer outfile.raw -c 2 outfile.wav
+
+Sox is part of the most linux distributions.
+
+
+Note: the resulted output file is also converted to stereo as not all
+audio-devices allow playing out mono audio files.
+
+
+** How to compile:
+just do "make".
+
+
+*** Header rewrite:
+The current implementation of the gmsk-server tool allows rewriting of the D-STAR
+header, including recalculation of the FCS checksum.
+
+Check the source-code in "rewriteheader.h" for more info on this.
+Do not forget to re-compile the code with "make" afterwards.
+
+Modifying the header will be make more dynamic in future versions.
+
+
+*** TO DO:
+- output directly to audio-device. (needs rewriting the code for parallel
+processing)
+- raw input files for non D-STAR formats 
+- add code to drive external application for PTT activation
+- read rewrite rules from file
+
+
+73
+Kristoff - ON1ARF
