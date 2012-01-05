@@ -23,6 +23,7 @@
 
 
 // Version 20111106: initial release
+// Versobn 20120105: small changes to names of global vars
 
 
 /*
@@ -169,7 +170,7 @@ if (init) {
 
 filterret=firfilter(audioin);
 
-if (global.invert) {
+if (global.audioinvert) {
 	if (filterret > 0) {
 		bit=0;
 	} else {

@@ -9,6 +9,7 @@
 // version 20111112: support for stereo files
 // version 20111130: end stream on signal drop. do not process noise data,
 //                   accept bits at startsync and descrable slow data
+// version 20120105: raw mode audio output
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -51,6 +52,8 @@ int filesize;
 
 int hadtowait;
 
+int rawsyncmask;
+
 uint16_t last2octets;
 int syncreceived;
 uint32_t last4octets=0;
@@ -90,6 +93,11 @@ int udpsocket=0;
 int maxaudiolevelvalid=0;
 int framesnoise=0;
 
+// raw buffer
+unsigned char rawbuffer[12]; // 96 bits = 12 octets = 20 ms of audio
+unsigned char *p_rawbuffer; 
+int rawbuffer_octet, rawbuffer_bit; // rawbuffer octet and bit counter
+
 // temp values to calculate maximum audio level
 int64_t maxaudiolevelvalid_total=0;
 int maxaudiolevelvalid_numbersample=0;
@@ -108,10 +116,19 @@ state=0;
 syncreceived=0;
 last2octets=0;
 
+// rawsync mask: depends on rawsyncsize
+// should contain valid between 1 and 16.
+// check just to be sure
+if ((p_global->rawsyncsize < 1) || (p_global->rawsyncsize > 16)) {
+	fprintf(stderr,"Error in processaudio, rawsynsize should be between 1 and 16, got %d. Exiting!\n",p_global->rawsyncsize);
+	exit(-1);
+}; // end if
+rawsyncmask=size2mask[p_global->rawsyncsize-1];
+
 
 // precalculate values to avoid having to do the calculation every
 // itteration
-if (global.stereo) {
+if (p_global->stereo) {
 	channel=2;
 	buffermask=0x7f;
 } else {
@@ -126,7 +143,7 @@ if (p_global->udpsockaddr) {
 	udpsocket=socket(AF_INET6,SOCK_DGRAM,0);
 
 	if (udpsocket < 0) {
-		fprintf(stderr,"Error: coumd not create UDP socket. Shouldn't happen!\n");
+		fprintf(stderr,"Error: could not create UDP socket. Shouldn't happen!\n");
 		exit(-1);
 	}; // end if
 }; // end if
@@ -151,23 +168,24 @@ filesize=0;
 countnoiseframe=0;
 hadtowait=0;
 
+if (!(p_global->raw)) {
+	// fill in configframe structure, as much as possible
+	configframe.length=0x38;
+	memcpy(&configframe.headertext,"DSVT",4);
+	configframe.configordata=0x10;
+	configframe.unknown1[0]=0x00; configframe.unknown1[1]=0x00; configframe.unknown1[2]=0x00; 
+	configframe.dataorvoice=0x20;
+	configframe.unknown2[0]=0x00; configframe.unknown2[1]=0x01; configframe.unknown2[2]=0x01; 
+	configframe.framecounter=0x80;
 
-// fill in configframe structure, as much as possible
-configframe.length=0x38;
-memcpy(&configframe.headertext,"DSVT",4);
-configframe.configordata=0x10;
-configframe.unknown1[0]=0x00; configframe.unknown1[1]=0x00; configframe.unknown1[2]=0x00; 
-configframe.dataorvoice=0x20;
-configframe.unknown2[0]=0x00; configframe.unknown2[1]=0x01; configframe.unknown2[2]=0x01; 
-configframe.framecounter=0x80;
-
-// fill in digital voice frame, as much as possible
-dvframe.length=0x1b;
-memcpy(&dvframe.headertext,"DSVT",4);
-dvframe.configordata=0x20;
-dvframe.unknown1[0]=0x00; dvframe.unknown1[1]=0x00; dvframe.unknown1[2]=0x00; 
-dvframe.dataorvoice=0x20;
-dvframe.unknown2[0]=0x00; dvframe.unknown2[1]=0x01; dvframe.unknown2[2]=0x01; 
+	// fill in digital voice frame, as much as possible
+	dvframe.length=0x1b;
+	memcpy(&dvframe.headertext,"DSVT",4);
+	dvframe.configordata=0x20;
+	dvframe.unknown1[0]=0x00; dvframe.unknown1[1]=0x00; dvframe.unknown1[2]=0x00; 
+	dvframe.dataorvoice=0x20;
+	dvframe.unknown2[0]=0x00; dvframe.unknown2[1]=0x01; dvframe.unknown2[2]=0x01; 
+}; // end if (not raw)
 
 
 // init thisfileend. For ALSA capturing, there is no file ending; so we
@@ -198,7 +216,7 @@ while (!(thisfileend)) {
 	audiobuffer= (int16_t *) p_global->buffer[thisbuffer];
 	thisbuffersize=p_global->buffersize[thisbuffer];
 
-	if (global.fileorcapture) {
+	if (p_global->fileorcapture) {
 		thisfileend=p_global->fileend[thisbuffer];
 		p_global->pntr_process = nextbuffer;
 	}; // end if
@@ -208,7 +226,7 @@ while (!(thisfileend)) {
 	// things to do at the beginning of every block of data
 
 	// dump average if requested
-	if (global.dumpaverage) {
+	if (p_global->dumpaverage) {
 		printf("(%04X)",p_global->audioaverage[thisbuffer]);
 	}; // end if
 
@@ -242,6 +260,86 @@ while (!(thisfileend)) {
 		continue;
 	};
 
+
+	// if state 3 (raw data receive) and audio-level is to high (i.e. we receive noise), this is seen
+	// as a end-of-stream situation
+	if ((state == 3) && (maxaudiolevelvalid) && (p_global->audioaverage[thisbuffer] > maxaudiolevelvalid)) {
+
+		// if raw buffer already started, fill in rest of remaining raw buffer with all 0
+		// and send out
+		if ((rawbuffer_octet) || (rawbuffer_bit)) {
+			// fill in rest of current octet
+
+			// raw invert = 1 -> first bit is on left of octet (MSB)
+			// raw invert = 0 -> first bit is on right of octet (LSB)
+			if (p_global->rawinvert) {
+				while (rawbuffer_bit < 8) {
+					*p_rawbuffer<<=1;
+					rawbuffer_bit++;
+				}; // end while
+
+				// move up pointer
+				rawbuffer_octet++;
+				p_rawbuffer++;
+			} else {
+				while (rawbuffer_bit < 8) {
+					*p_rawbuffer>>=1;
+					rawbuffer_bit++;
+				}; // end if
+
+				rawbuffer_octet++;
+				p_rawbuffer++;
+			}; // end if (rawinvert?)
+
+			// fill in rest of octets with all zero
+			while (rawbuffer_octet < 12) {
+				*p_rawbuffer=0;
+				p_rawbuffer++;
+				rawbuffer_octet++;
+			}; // end while
+
+			// now send and/or write raw buffer
+
+			// output to file?
+			if (p_global->fnameout) {
+
+				// write to file
+				ret=fwrite(&rawbuffer, 12,1,fileout);
+				if (ret < 0) {
+					// error
+					fprintf(stderr,"Warning: Error writing final raw frame to file %s!\n",p_global->fnameout); 
+				}; // end if
+
+				// if writing to stdout -> write end marker
+				if ((p_global->outtostdout) && (p_global->sendmarker)) {
+					// send marker for END raw stream
+					fprintf(fileout,"RAWSTREAMEND.\n");
+				}; // end if
+
+				// flush file
+				fflush(fileout);
+
+			};
+
+			// send UDP packets
+			if (p_global->udpsockaddr) {
+				// send UDP frame
+				ret=sendto(udpsocket,rawbuffer,12,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+				if (ret < 0) {
+					// error
+					fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+				}; // end if
+			}; // end if (send UDP)
+
+
+		}; // end if (still data in buffer, send it)
+
+		// re-init vars
+		state=0;
+	}; // end if
+
+
 	// reset countnoiseframe
 	countnoiseframe=0;
 
@@ -265,6 +363,30 @@ while (!(thisfileend)) {
 			framesnoise=0;
 		}; // end else - if
 	}; // end if
+
+	// raw data (state == 3), calculate noiselevel based on first 8 audio groups
+	// (= 160 ms, slightly less then size of header for D-STAR and easier to calculate
+	if (state == 3) {
+		if (maxaudiolevelvalid_numbersample < 8) {
+			maxaudiolevelvalid_total += p_global->audioaverage[thisbuffer];
+			maxaudiolevelvalid_numbersample++;
+
+			// did we now receive sufficient samples ?
+			if (maxaudiolevelvalid_numbersample > 8) {
+				// shift right 3 = divide by 8
+				maxaudiolevelvalid = (maxaudiolevelvalid_total >> 3) * MAXAUDIOLEVEL_MARGIN;
+			}; // end if
+			
+		} else {
+			if ((maxaudiolevelvalid) && (p_global->audioaverage[thisbuffer] > maxaudiolevelvalid)) {
+				framesnoise++;
+			} else {
+				framesnoise=0;
+			}; // end else - if
+		}; // end else - if
+	}; // end if
+
+
 
 	// process buffer
 
@@ -294,12 +416,13 @@ while (!(thisfileend)) {
 		// "State" variable:
 		// state 0: waiting for sync "10101010 1010101" (bit sync) or
 		// 	"1110110 01010000" (frame sync)
-		// state 1: receiving radioheader (660 bits)
-		// state 2: receiving main part of bitstream
+		// state 1: receiving D-STAR radioheader (660 bits)
+		// state 2: receiving D-STAR main part of bitstream
+		// state 3: receiving RAW
 
 		// state 0
 		if (state == 0) {
-			if (global.dumpstream >= 2) {
+			if (p_global->dumpstream >= 2) {
 				printbit(bit,6,2,0);
 			}; // end if
 
@@ -308,31 +431,6 @@ while (!(thisfileend)) {
 			if (bit) {
 				last2octets |= 0x01;
 			}; // end if
-
-			if (syncreceived > 20) {
-			// start looking for frame sync if we have received sufficient bitsync
-			// we accept up to "BITERROR START SYN" penality points for errors
-				bitmatch=countdiff16(last2octets,0x7FFF,15,0x7650,BITERRORSSTARTSYN);
-
-				if (bitmatch) {
-					// OK, we have a valid frame sync, go to state 1
-					state=1;
-					radioheaderreceived=0;
-
-					// reset print-bit to beginning of stream
-					if (global.dumpstream >= 2) {
-						putchar(0x0a); // ASCII 0x0a = linefeed
-					}; // end if
-					printbit(-1,0,0,0);
-
-					// store first data of audiolevel to calculate average
-					maxaudiolevelvalid_total=p_global->audioaverage[thisbuffer];
-					maxaudiolevelvalid_numbersample=1;
-
-					// go to next bit
-					continue;
-				}; // end if
-			}; 
 
 			// according the specifications, the syncronisation pattern is 64 times "0101", however there also
 			// seams to be cases where the sequence "1111" is send.
@@ -344,14 +442,158 @@ while (!(thisfileend)) {
 				}; // end if
 			}; 
 
-			// end of checking, 
+			if (syncreceived > 20) {
+			// start looking for frame sync if we have received sufficient bitsync
 
+				// we accept up to "BITERROR START SYN" penality points for errors
+				// rawsyncmask is initialised above, based on rawsyncsize
+				bitmatch=countdiff16(last2octets,rawsyncmask,p_global->rawsyncsize,p_global->rawsync,BITERRORSSTARTSYN);
+
+				if (bitmatch) {
+					// OK, we have a valid frame sync, go to state 1 (D-STAR) or 3 (raw)
+					if (p_global->raw) {
+						state=3;
+
+						// init buffervars
+						rawbuffer_octet=0;
+						rawbuffer_bit=0;
+
+						p_rawbuffer=rawbuffer;
+					} else {
+						state=1;
+					}; // end else - if
+
+					radioheaderreceived=0;
+
+					// reset print-bit to beginning of stream
+					if (p_global->dumpstream >= 2) {
+						putchar(0x0a); // ASCII 0x0a = linefeed
+					}; // end if
+					printbit(-1,0,0,0);
+
+					// store first data of audiolevel to calculate average
+					maxaudiolevelvalid_total=p_global->audioaverage[thisbuffer];
+					maxaudiolevelvalid_numbersample=1;
+
+					// if raw, write to file or open UDP 
+					if (p_global->raw) {
+						// write sync pattern + sync frame to file or UDP
+						// problem, we do not have the sync pattern, so we will recreate it
+						// based on 128 times "01" plus the frame sync pattern
+
+						// 128 times "01" = 32 octets + maximum 16 bit frame-sync						
+						unsigned char syncbuffer[34];
+						uint16_t mask;
+						uint16_t syncpattern;
+
+						// the end of the "0101"-pattern should match exactly the beginning of the
+						// frame sync. So the pattern of the first 32 octets depends on the size
+						// of the sync frame, either "10101010" if size of synpattern is even
+						// or "01010101" it if odd. In that case, an additional 0 is added in front
+
+						if (p_global->rawsyncsize & 0x01) {
+							// odd
+							if (p_global->rawinvert) {
+								// invert bit order
+								memset(syncbuffer,0xaa,32);
+							} else {
+								// no invert
+								memset(syncbuffer,0x55,32);
+							}; // end else - if
+
+							// do not invert mask (will be done later)
+							mask=0x5555 & ~size2mask[(p_global->rawsyncsize) -1];
+						} else {
+							// even
+							if (p_global->rawinvert) {
+								// invert bit order
+								memset(syncbuffer,0x55,32);
+							} else {
+								// no invert
+								memset(syncbuffer,0xaa,32);
+							}; // end else - if
+
+							// do not invert mask (will be done later)
+							mask=0xaaaa & ~size2mask[(p_global->rawsyncsize) -1];
+						}; // end else - if (odd or even)
+
+						// create last 2 octets, always non-inverted at this stage
+						syncpattern=p_global->rawsync & size2mask[(p_global->rawsyncsize) -1];
+						syncpattern |= mask;
+
+						// copy of last 2 octets of buffer
+						if (p_global->rawinvert) {
+						// invert
+							syncbuffer[32]=(unsigned char) (invertbits[(syncpattern >> 8) & 0xFF]);
+							syncbuffer[33]=(unsigned char) (invertbits[syncpattern & 0xFF]);
+						} else {
+						// no invert
+							syncbuffer[32]=(unsigned char) (syncpattern >> 8) & 0xFF;
+							syncbuffer[33]=(unsigned char) syncpattern & 0xFF;
+						}; // end else - if
+
+						// output to file?
+						if (p_global->fnameout) {
+
+							if (p_global->outtostdout) {
+								// open to standard out
+								// fileout becomes standard-out
+								fileout=stdout;
+
+								// send marker for begin raw stream
+								if (p_global->sendmarker) {
+									fprintf(fileout,"RAWSTREAMBEGIN:\n");
+									fflush(fileout);
+								}; // end if
+
+							} else {
+								// open to real file
+								fileout=fopen(p_global->fnameout,"w");
+
+								if (!fileout) {
+									fprintf(stderr,"Error: raw output file %s could not be opened!\n",p_global->fnameout);
+									exit(-1);
+								}; // end if
+							}; // end if
+
+							// write to file
+							ret=fwrite(&syncbuffer, 34,1,fileout);
+							if (ret < 0) {
+								// error
+								fprintf(stderr,"Warning: Error in write of raw header to file %s!\n",p_global->fnameout); 
+							}; // end if
+
+							// flush file
+							fflush(fileout);
+						};
+
+						// send UDP packets
+						if (p_global->udpsockaddr) {
+							// send UDP frame
+							// start at "headertext" (i.e. do not send 2 "length" indication octets)
+							ret=sendto(udpsocket,&syncbuffer,34,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+							if (ret < 0) {
+								// error
+								fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+							}; // end if
+						}; // end if (send UDP)
+
+
+					}; // end if (raw)
+
+					// go to next bit
+					continue;
+				}; // end if
+			}; 
+
+			// end of checking, 
 			// go to next frame
 			continue;
 		}; // end if (state 0)
 
 
-		// state 1: radioheader
+		// state 1: D-STAR radioheader
 		if (state == 1) {
 			// read up to 660 characters
 		
@@ -364,7 +606,7 @@ while (!(thisfileend)) {
 				// calculate average audio level
 				// if we receive a frame with an average value more then 40% over
 				// that, it is concidered noise
-				maxaudiolevelvalid = (1.2 * maxaudiolevelvalid_total) / maxaudiolevelvalid_numbersample;
+				maxaudiolevelvalid = (MAXAUDIOLEVEL_MARGIN * maxaudiolevelvalid_total) / maxaudiolevelvalid_numbersample;
 
 
 				scramble(radioheaderbuffer,radioheaderbuffer2);
@@ -430,15 +672,30 @@ while (!(thisfileend)) {
 
 				// do we output to files ???
 				if (p_global->fnameout) {
-					// open file for output
-					snprintf(fnamefull,160,"%s-%04d.dvtool",p_global->fnameout,filecount);
 
-					fileout=fopen(fnamefull, "w");
+					// write to file or standard out?
+					if (p_global->outtostdout) {
+						fileout=stdout;
 
-					if (!fileout) {
-						fprintf(stderr,"Error: output file %s could not be opened!\n",fnamefull);
-						exit(-1);
-					}; // end if
+						// write marker for start DSTAR stream
+						if (p_global->sendmarker) {
+							fprintf(fileout,"DSTARSTREAMBEGIN:\n");
+							fflush(fileout);
+						}; // end if
+
+						// set fullname
+						memcpy(fnamefull,"-",2); // copy 2 octets: "-" + \000
+					} else {
+						// open file for output
+						snprintf(fnamefull,160,"%s-%04d.dvtool",p_global->fnameout,filecount);
+
+						fileout=fopen(fnamefull, "w");
+
+						if (!fileout) {
+							fprintf(stderr,"Error: output file %s could not be opened!\n",fnamefull);
+							exit(-1);
+						}; // end if
+					}; // end else - if
 
 					
 					// write DVtool header (initialised above)
@@ -447,6 +704,7 @@ while (!(thisfileend)) {
 						fprintf(stderr,"Error: cannot write DVtool header to file %s\n",fnamefull);
 						exit(-1);
 					}; // end if
+					fflush(fileout);
 				}; // end if
 
 				// note, the 10 octets written above are only used in files, not in UDP streams
@@ -480,6 +738,7 @@ while (!(thisfileend)) {
 						fprintf(stderr,"Error: cannot write configframe to file %s\n",fnamefull);
 						exit(-1);
 					}; // end if
+					fflush(fileout);
 				};
 
 				if (p_global->udpsockaddr) {
@@ -508,7 +767,7 @@ while (!(thisfileend)) {
 		continue;
 		}; // end if (state 1)
 
-		// state 2: main part of stream
+		// state 2: D-STAR main part of stream
 		if (state == 2) {
 			char marker=0;
 
@@ -564,7 +823,7 @@ while (!(thisfileend)) {
 			}; // end if
 
 
-			if (global.dumpstream >= 1) {
+			if (p_global->dumpstream >= 1) {
 				printbit(bit,6,2,marker);
 			}; // end if
 
@@ -689,30 +948,41 @@ while (!(thisfileend)) {
 						fprintf(stderr,"Error: cannot write dvframe %d (last frame of stream) to file %s\n",framecount,fnamefull);
 						exit(-1);
 					}; // end if
+					fflush(fileout);
+
 					filesize++;
 
 
-					// now move back to the beginning of the dvtool file.
-					// rewrite header + filesize
-					ret=fseek(fileout,0,SEEK_SET);
-					if (ret) {
-						fprintf(stderr,"Error: cannot rewind to position 0 in file %s\n",fnamefull);
-						exit(-1);
+					if (p_global->outtostdout) {
+						// done, write endstream" marker
+						if (p_global->sendmarker) {
+							fprintf(fileout,"DSTARSTREAMEND\n");
+							fflush(fileout);
+						}; // end if 
+					} else {
+						// move back to the beginning of the dvtool file.
+						// rewrite header + filesize
+
+						ret=fseek(fileout,0,SEEK_SET);
+						if (ret) {
+							fprintf(stderr,"Error: cannot rewind to position 0 in file %s\n",fnamefull);
+							exit(-1);
+						}; // end if
+
+
+						// write size
+						// write DVtool header (initialised above)
+						dvtoolheader.filesize=filesize;
+
+						ret=fwrite(&dvtoolheader,10,1,fileout);
+						if (ret != 1) {
+							fprintf(stderr,"Error: cannot rewrite DVtool header to file %s\n",fnamefull);
+							exit(-1);
+						}; // end if
+
+						// close file, also does fflush at the same time
+						fclose(fileout);
 					}; // end if
-
-
-					// write size
-					// write DVtool header (initialised above)
-					dvtoolheader.filesize=filesize;
-
-					ret=fwrite(&dvtoolheader,10,1,fileout);
-					if (ret != 1) {
-						fprintf(stderr,"Error: cannot rewrite DVtool header to file %s\n",fnamefull);
-						exit(-1);
-					}; // end if
-
-					// close file
-					fclose(fileout);
 				}; // end if 
 				
 				if (p_global->udpsockaddr) {
@@ -746,7 +1016,8 @@ while (!(thisfileend)) {
 						fprintf(stderr,"Error: cannot write dvframe %d to file %s\n",framecount,fnamefull);
 						exit(-1);
 					}; // end if
-					filesize ++;
+					fflush(fileout);
+					filesize++;
 				}; // end if
 
 
@@ -774,6 +1045,70 @@ while (!(thisfileend)) {
 		
 			continue;
 		}; // end if (state 2)
+
+
+		// state 3: RAW stream
+		if (state == 3) {
+			// raw invert = 1 -> first bit is on left of octet (MSB)
+			// raw invert = 0 -> first bit is on right of octet (LSB)
+			if (p_global->rawinvert) {
+				*p_rawbuffer<<=1;
+				if (bit) {
+					*p_rawbuffer |= 1;
+				}; // end if
+			} else {
+				*p_rawbuffer>>=1;
+				if (bit) {
+					*p_rawbuffer |= 0x80;
+				}; // end if
+			}; // end else - if
+
+			rawbuffer_bit++;
+
+			if (rawbuffer_bit >= 8) {
+				// move up octet counter
+				rawbuffer_octet++;
+				p_rawbuffer++;
+				
+				rawbuffer_bit=0;
+			}; // end if
+
+			// complete frame? (12 octets)
+			if (rawbuffer_octet >= 12) {
+
+				// send or write raw frame
+
+				// output to file?
+				if (p_global->fnameout) {
+
+					// write to file
+					ret=fwrite(&rawbuffer, 12,1,fileout);
+					if (ret < 0) {
+						// error
+						fprintf(stderr,"Warning: Error writing raw frame to file %s!\n",p_global->fnameout); 
+					}; // end if
+
+					// flush file
+					fflush(fileout);
+				};
+
+				// send UDP packets
+				if (p_global->udpsockaddr) {
+					// send UDP frame
+					ret=sendto(udpsocket,rawbuffer,12,0, (struct sockaddr *) p_global->udpsockaddr, sizeof(struct sockaddr_in6));
+
+					if (ret < 0) {
+						// error
+						fprintf(stderr,"Warning: udp packet could not be send %d (%s)!\n",errno,strerror(errno)); 
+					}; // end if
+				}; // end if (send UDP)
+
+
+				// reinit vals
+				rawbuffer_octet=0; rawbuffer_bit=0; p_rawbuffer=rawbuffer;
+			}; // end if
+
+		}; // end if
 
 	}; // end for (sampleloop)
 

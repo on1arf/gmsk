@@ -4,6 +4,7 @@
 // global data + defines, some other vars
 
 // version 20111107: initial release
+// version 20120105: raw files, out to stdout + small changes names of vars
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -27,6 +28,10 @@
 #define BITERRORSSTARTSYN 2	// number of biterrors accepted in "START" syn pattern
 										// note, this is a "penalty".
 										// 2 means either 1 bit wrong
+#define RETMSGSIZE 250			// maximum size of return message of parsecli
+
+                              // margin above what level a received audio-sample is concidered noise
+#define MAXAUDIOLEVEL_MARGIN 1.4
 
 // global data structure definition
 typedef struct {
@@ -43,16 +48,22 @@ snd_pcm_t *handle;
 snd_pcm_uframes_t frames;
 int audioread;
 char * fnameout;
+int outtostdout;
 char * udphost;
 int udpport;
 int dumpstream;
 int dumpaverage;
-int invert;
+int audioinvert;
 int stereo;
 int verboselevel;
 int ipv4only;
 int ipv6only;
 struct sockaddr_in6 * udpsockaddr;
+int raw;
+uint16_t rawsync;
+int rawsyncsize;
+int rawinvert;
+int sendmarker;
 } globaldatastr;
 
 // global data structure itself
@@ -64,6 +75,8 @@ globaldatastr global;
 
 // some other stuff
 unsigned char bit2octet[]={ 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+
+uint16_t size2mask[]= {0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF, 0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF};
 
 unsigned char invertbits[]= {
  0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0, 0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
