@@ -17,12 +17,15 @@
  */
 
 
+// Release information:
+// version 20111213: initial release
+// version 20120105: No change
+
 // this is currently is hardcoded rewriting of the D-STAR configuration
 // frame header
 
 // uncomment and change the lines as needed.
 // do not forget to uncomment the change-checksum line at the end
-
 
 // this code will be made more dynamic in a later version of this
 // software

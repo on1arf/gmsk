@@ -1,10 +1,21 @@
 // DSP related functions and data //
 
 
-// Original copyright:
-// (C) 2011 Jonathan Naylor G4KLX
-
-// (C) 2011 Kristoff Bonne ON1ARF
+/*
+ *      Original copyright:
+ *      Copyright (C) 2011 by Jonathan Naylor, G4KLX
+ *
+ *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
+ *
+ *      This program is free software; you can redistribute it and/or modify
+ *      it under the terms of the GNU General Public License as published by
+ *      the Free Software Foundation; version 2 of the License.
+ *
+ *      This program is distributed in the hope that it will be useful,
+ *      but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *      GNU General Public License for more details.
+ */
 
 // These is the low-level DSP functions that make up the gmsk demodulator:
 // firfilter
@@ -17,6 +28,7 @@
 // http://groups.yahoo.com/group/pcrepeatercontroller
 
 
+
 // Changes:
 // Convert FIR-filter to integer
 // Change PLL values so to make PLLINC and SMALLPLLINC match integer-boundaries
@@ -25,20 +37,7 @@
 
 // Version 20111106: initial release demodulation
 // Version 20111213: initial release modulation
-
-
-/*
- *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
+// Version 20120105: no change
 
 
 
@@ -106,6 +105,7 @@ const int buffersize_modulate=820; // coeffs_size_modulate * 20;
 // SMALL PLL Increase = PLLINC / INC
 #define SMALLPLLINC 10
 
+///////////////////////////////////////
 /// function firfilter for demodulation
 signed long long firfilter_demodulate(int16_t val) {
 static int pointer;
@@ -170,6 +170,7 @@ return(retval);
 };
 
 
+///////////////////////////////////////
 /// function firfilter for modulation
 signed long long firfilter_modulate(int16_t val) {
 static int pointer;
@@ -234,6 +235,8 @@ return(retval);
 }; // end function firfilter_modulate
 
 
+///////////////////////////////////////
+/// function demodulate
 int demodulate (int16_t audioin) {
 
 static int init=1;

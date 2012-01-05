@@ -22,6 +22,11 @@
  *	GNU General Public License for more details.
  */
 
+// version 201110: initial release (D-STAR voice announcement software)
+// version 20111213: No change
+// version 20120105: No change
+
+
 #include <stdint.h>
 
 static const unsigned short ccittTab[] = {

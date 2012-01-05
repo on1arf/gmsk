@@ -31,7 +31,7 @@
 
 // Release information:
 // version 20111213: initial release
-
+// version 20120105: play out to alsa-devices, PTT file-lock, raw files, read from stdin
 
 
 // include files
@@ -51,15 +51,39 @@
 // for hton
 #include "arpa/inet.h"
 
+// for usleep
+#include <unistd.h>
+
+// ALSA audio
+#include <alsa/asoundlib.h>
+
+// POSIX threads
+#include <pthread.h>
+#include <signal.h>
+
+// posix interrupt timers
+#include <time.h>
+
+// defines for timed interrupts
+#define CLOCKID CLOCK_REALTIME
+#define SIG SIGRTMIN
+
+
 ////////// FILE INCLUDES
 #include "global.h"
 #include "parsecliopts.h"
 #include "dvtool.h"
 #include "fcs.h"
 #include "rewriteheader.h"
-#include "descramble.h"
+#include "buffer.h"
+#include "dstarheader.h"
 #include "dspstuff.h"
 #include "gmskmodulate.h"
+#include "readdvtool.h"
+#include "writefile.h"
+#include "input.h"
+#include "initalsa.h"
+#include "alsaout.h"
 
 /////////////////////////////////////////
 /////////////////////////////////////////
@@ -72,17 +96,36 @@ int main (int argc, char ** argv) {
 
 // local vars
 int retval;
-int loop;
 char retmsg[RETMSGSIZE];
 
 
-FILE * filein;
-FILE * fileout;
+// threads
+pthread_t thr_writefile;
+pthread_t thr_input;
+pthread_t thr_gmskmodulate;
 
+
+// timed interrupts
+struct sigaction sa;
+struct sigevent sev;
+timer_t timerid;
+struct itimerspec its;
+
+
+
+
+////////////
 // init vars
 global.invert=0;
 
-int buffer[660], buffer2[660];
+global.ptr_a_read=0;
+global.ptr_a_fillup=1;
+
+global.ptr_b_read=0;
+global.ptr_b_fillup=1;
+
+global.lockfd=-1;
+
 /////////////////////////////
 // Command line parameters parsing
 //
@@ -91,7 +134,6 @@ int buffer[660], buffer2[660];
 // returns 0 if all OK; -1 on error, 1 on warning
 retval=parsecliopts(argc,argv,retmsg);
 
-
 if (retval) {
 	// retval != 0: error or warning
 	fprintf(stderr,"%s",retmsg);
@@ -103,344 +145,87 @@ if (retval) {
 }; // end if
 
 
-// open input file
-filein=fopen(global.fnamein,"r");
 
-if (!(filein)) {
-	fprintf(stderr,"Error: could not open input file!\n");
-	exit(-1);
-}; // end if
+// open (create if needed) PTTlockfile.
+// The sender application will set up a POSIX lock on that file
+// when the PTT needs to be pushed
+// That way, an external application can monitor this and
+// do the actual hardware invention to switch the PTT
 
-// open output file
-fileout=fopen(global.fnameout,"w");
+if (global.lockfile) {
+	global.lockfd=open(global.lockfile, O_WRONLY|O_CREAT);
 
-if (!(fileout)) {
-	fprintf(stderr,"Error: could not open output file!\n");
-	exit(-1);
-}; // end if
-
-
-int16_t silence=0;
-
-// we start with 5 seconds of silence (value 0)
-// send 240000 samples (5 seconds at 48000 samples / second)
-for (loop=0;loop<240000;loop++) {
-	retval=fwrite(&silence,sizeof(int16_t),1,fileout);
-}; // end for
-
-// next 128 bit pattern containing "1010... " (which is twice what
-// the specification demands, as that only requires 64 bits), followed
-// by the frame syncronisation pattern "1110110 01010000"
-
-// send with bit inversion
-retval=modulateandout_octets(startsync_pattern, sizeof(startsync_pattern),fileout,retmsg,1);
-
-if (retval) {
-	// retval != 0: error or warning
-	fprintf(stderr,"%s",retmsg);
-
-	// retval < 0: error -> exit
-	if (retval <0 ) {
+	if (global.lockfd == -1) {
+		fprintf(stderr,"Error: Lockfile %s could not be opened or created!\n",global.lockfile);
 		exit(-1);
-	};
-}; // end if
-
-
-// read header from input file
-str_dvtoolheader dvtoolheader;
-
-retval=fread(&dvtoolheader, 10, 1, filein);
-
-if (retval != 1) {
-	fprintf(stderr,"Error: could not read dvtool header from input file!\n");
-	exit(-1);
-}; // end if
-
-// check header signature
-retval=memcmp(&dvtoolheader.headertext,"DVTOOL",6);
-
-if (retval) {
-	fprintf(stderr,"Error: did not find DVTOOL signature in input file!\n");
-	exit(-1);
-}; // end if
-
-
-
-// read dvtool header configuration frame
-str_configframe configframe;
-
-retval=fread(&configframe, 58, 1, filein);
-
-if (retval != 1) {
-	fprintf(stderr,"Error: could not read dvtool configuration frame from input file!\n");
-	exit(-1);
-}; // end if
-
-// check length
-if (configframe.length != 56) {
-	fprintf(stderr,"Error: incorrect length for DVTOOL configuration frame in input file. Got %d, expected 56\n",configframe.length);
-	exit(-1);
-}; // end if
-
-
-// check header signature
-retval=memcmp(&configframe.headertext,"DSVT",4);
-
-if (retval) {
-	fprintf(stderr,"Error: did not find correct signature in configuration frame!\n");
-	exit(-1);
-}; // end if
-
-
-// check config-or-data
-if (configframe.configordata != 0x10) {
-	fprintf(stderr,"Error: incorrect Config-or-Data field in DVTOOL configuration frame in input file. Got %02X, expected 0x10\n",configframe.configordata);
-	exit(-1);
-}; // end if
-
-// check data-or-voice
-if (configframe.dataorvoice != 0x20) {
-	fprintf(stderr,"Error: DVTOOL configuration frame in input file not marked as voice. Got %02X, expected 0x20\n",configframe.dataorvoice);
-	exit(-1);
-}; // end if
-
-// check frame counter
-if (configframe.framecounter != 0x80) {
-	fprintf(stderr,"Error: DVTOOL configuration frame in input file has incorrect framecounter. Got %02X, expected 0x80\n",configframe.framecounter);
-	exit(-1);
-}; // end if
-
-
-// rewrite header
-rewriteheader(&configframe);
-
-// encode header
-// convert octets into bits
-char *p;
-char c;
-int bitcounter;
-
-p=(char *) &configframe.flags[0];
-c=*p;
-bitcounter=0;
-
-for (loop=0;loop<328;loop++) {
-	if (c & bit2octet[bitcounter]) {
-		buffer[loop]=1;
-	} else {
-		buffer[loop]=0;
-	}; // end else - if
-	bitcounter++;
-
-	if (bitcounter >= 8) {
-		p++;
-		c=*p;
-		bitcounter=0;
 	}; // end if
-}; // end for
 
-// 2 last bits are zero
-buffer[328]=0; buffer[329]=0;
+}; // end if
 
 
-// FEC encoding
-retval=FECencoder(buffer,buffer2);
+// start threads
+// start thread to read input. This runs as a seperate thread so
+// not to be interrupted by the "alsa out" interrupt driven
+// interrupt which can "starve" the main thread 
+pthread_create(&thr_input, NULL, funct_input, (void *) &global);
+pthread_create(&thr_gmskmodulate, NULL, funct_modulateandbuffer, (void *) &global);
 
-// interleaving
-interleave(buffer2,buffer);
 
-// scramble
-scramble(buffer,buffer2);
+// start file out or alsa out
+if (global.fileoralsa == 0) {
+	pthread_create(&thr_writefile, NULL, funct_writefile, (void *) &global);
+} else if (global.fileoralsa == 1) {
+	// Set up interrupt handler for signal SIG, pointing to
+	// function 'alsaout'
+	sa.sa_flags=0;
+	sa.sa_handler = funct_alsaout;
+	sigemptyset(&sa.sa_mask);
 
-retval=modulateandout_bits(buffer2, 660,fileout,retmsg);
-if (retval) {
-	// retval != 0: error or warning
-	fprintf(stderr,"%s",retmsg);
-
-	// retval < 0: error -> exit
-	if (retval <0 ) {
+	retval=sigaction(SIG,&sa,NULL);
+	if (retval < 0) {
+		fprintf(stderr,"error in sigaction: function alsaout!\n");
 		exit(-1);
-	};
-}; // end if
-
-
-// read rest of dvtool file, frame per frame
-str_dvframe dvframe;
-
-
-// init vars
-int totalframecounter=0;
-int framecounter=0;
-int stop=0;
-int endsend=0;
-
-while (! (stop)) {
-	retval=fread(&dvframe,29,1,filein);
-
-	if (retval != 1) {
-		fprintf(stderr,"Error: Unexpected end of file after frame %d\n",totalframecounter);
-		stop=1;
-
-		endsend=0;	// endsend=0: still need to send frame with first part
-						// of endmarker, followed by frame with 2nd marker
-		break;
-	};
-
-	// check frame
-
-	// check length
-	if (dvframe.length != 27) {
-		fprintf(stderr,"Error: incorrect dvframe length for frame %d, got %d expected 27\n",totalframecounter,dvframe.length);
-		stop=1;
-
-		endsend=0;	// endsend=0: still need to send frame with first part
-						// of endmarker, followed by frame with 2nd marker
-		break;
-	}; // end if
-	
-
-	// check signature
-	if (memcmp(&dvframe.headertext,"DSVT",4)) {
-		fprintf(stderr,"Error: incorrect dvframe signature for frame %d\n",totalframecounter);
-		stop=1;
-
-		endsend=0;	// endsend=0: still need to send frame with first part
-						// of endmarker, followed by frame with 2nd marker
-		break;
 	}; // end if
 
-	// config or data
-	if (dvframe.configordata != 0x20) {
-		fprintf(stderr,"Error: Config-or-data of dvframe %d not correct. Got %02X, expected 0x20\n",totalframecounter,dvframe.configordata);
-		stop=1;
+	/* Create the timer */
+	sev.sigev_notify = SIGEV_SIGNAL;
+	sev.sigev_signo = SIG;
+	sev.sigev_value.sival_ptr = &timerid;
 
-		endsend=0;	// endsend=0: still need to send frame with first part
-						// of endmarker, followed by frame with 2nd marker
-		break;
+	retval=timer_create(CLOCKID, &sev, &timerid);
+	if (retval < 0) {
+		fprintf(stderr,"error in timer_create timer: function alsaout!\n");
+		exit(-1);
 	}; // end if
 
-	// data or voice
-	if (dvframe.dataorvoice != 0x20) {
-		fprintf(stderr,"Error: Data-or-voice of dvframe %d not correct. Got %02X, expected 0x20\n",totalframecounter,dvframe.configordata); 
-		stop=1;
+	// Configured timed interrupt, that will trigger a "SIG" interrupt
+	// every 20 ms
 
-		endsend=0;	// endsend=0: still need to send frame with first part
-						// of endmarker, followed by frame with 2nd marker
-		break;
+	// start timed function timer capture, every 20 ms, offset is 1 second to
+	// avoid "starvation" of the main thread by the capture thread (is started
+	// every 20 ms and takes just a little bit then 20 ms to execute)
+	its.it_value.tv_sec = 1;
+	its.it_value.tv_nsec = 0;
+	its.it_interval.tv_sec = 0;
+	its.it_interval.tv_nsec = 20000000; // 20 ms = 20 million nanoseconds
+
+	retval=timer_settime(timerid, 0, &its, NULL);
+
+	if (retval < 0) {
+		fprintf(stderr,"error in timer_settime timer: function capture!\n");
+		exit(-1);
 	}; // end if
 
-	// check framecounter
-	if ((dvframe.framecounter & 0x1f) != framecounter) {
-		fprintf(stderr,"Warning: Framecounter of dvframe %d not correct. Got %d, expected %d\n",totalframecounter,(dvframe.framecounter & 0x1f),framecounter); 
-		// correct framecounter
-		framecounter=dvframe.framecounter & 0x1f;
-	}; // end if
+} else {
+	// error
+	fprintf(stderr,"Error: Output should be either FILE or ALSA!\n");
+	exit(-1);
+}; // end elsif - if
 
 
-	if (framecounter == 0) {
-		// frame 0: slow-data should contain sync-pattern (0x554d16) and no scrambling
-		if (global.sync) {
-		// if "resync" option is set, overwrite sync pattern
-			dvframe.slowspeeddata[0] = 0x55;
-			dvframe.slowspeeddata[1] = 0x4d;
-			dvframe.slowspeeddata[2] = 0x16;
-		}; // end if
-	} else {
-		// not frame 0
-		if (global.zap) {
-			// zap: clear slow-data part
-			// rewrite with 0x000000, but also apply scrambling
-			dvframe.slowspeeddata[0] = 0x70;
-			dvframe.slowspeeddata[1] = 0x4f;
-			dvframe.slowspeeddata[2] = 0x93;
-		} else {
-			// apply scrambling
-			dvframe.slowspeeddata[0] ^= 0x70;
-			dvframe.slowspeeddata[1] ^= 0x4f;
-			dvframe.slowspeeddata[2] ^= 0x93;
-		}; // end else - if
-	}; // end if
+// endless loop
+while (FOREVER) {
+	sleep(1000);
+}; // end while
 
-	// is it the last frame (6th bit of framecounter is set)
-	if (dvframe.framecounter & 0x40) {
-		stop=1;
-
-		// endsend=1 -> frame with first part of end marker send
-		// need to send one frame with 2nd part 
-		endsend=1;
-
-		// replace slowspeeddata with "end" marker
-		dvframe.slowspeeddata[0] = 0xfe;
-		dvframe.slowspeeddata[1] = 0xaa;
-		dvframe.slowspeeddata[2] = 0xaa;
-	}; 
-
-
-	// modulate and send, no reverse (as the .dvtool file is already reversed)
-	retval=modulateandout_octets((unsigned char *) &dvframe.ambe[0], 12,fileout,retmsg,0);
-
-	// if stop (last frame) break out of loop here;
-	if (stop) {
-		break;
-	}; // end if
-
-	totalframecounter++;
-
-	framecounter++;
-
-	// reset framecounter every 21 frames
-	if (framecounter > 20) {
-		framecounter=0;
-	}; // end if
-	
-}; // end while stop
-
-
-// main loop done.
-
-// check "endsend"
-
-if (endsend < 1) {
-// endsend = 0 -> no frame with first part of endmarker yet send
-// send fake frame
-
-	// dummy frame
-	dvframe.ambe[0]=0xfe; dvframe.ambe[1]=0xaa; dvframe.ambe[2]=0xaa; 
-	dvframe.ambe[3]=0xfe; dvframe.ambe[4]=0xaa; dvframe.ambe[5]=0xaa; 
-	dvframe.ambe[6]=0xfe; dvframe.ambe[7]=0xaa; dvframe.ambe[8]=0xaa; 
-
-	// first part of end marker: slowdata contains 0xfeaaaa
-	dvframe.slowspeeddata[0] = 0xfe;
-	dvframe.slowspeeddata[1] = 0xaa;
-	dvframe.slowspeeddata[2] = 0xaa;
-
-
-	// modulate and send, no reverse (as the .dvtool file is already reversed)
-	retval=modulateandout_octets((unsigned char *) &dvframe.ambe[0], 12,fileout,retmsg,0);
-
-	endsend=1;
-};
-
-
-if (endsend <= 1) {
-// send part of end marker: ambe[0] up to ambe[2] contain 0xaa135e
-	dvframe.ambe[0]=0xaa; dvframe.ambe[1]=0x13; dvframe.ambe[2]=0x5e; 
-
-// rest of frame (not specified in formal specs) contain 0xaa
-	dvframe.ambe[3]=0xaa; dvframe.ambe[4]=0xaa; dvframe.ambe[5]=0xaa; 
-	dvframe.ambe[6]=0xaa; dvframe.ambe[7]=0xaa; dvframe.ambe[8]=0xaa; 
-}
-
-
-// done: add some more silence (1 second)
-for (loop=0;loop<48000;loop++) {
-	retval=fwrite(&silence,sizeof(int16_t),1,fileout);
-}; // end for
-
-
-// done, close all files
-fclose(filein);
-fclose(fileout);
-
-return(0);
 }; // end main application

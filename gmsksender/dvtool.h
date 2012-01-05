@@ -2,7 +2,6 @@
 
 // structures for the .dvtool file format
 
-// version 20111107: initial release
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -17,6 +16,10 @@
  *      GNU General Public License for more details.
  */
 
+// Release information:
+// version 20111107: initial release (gmskreceiver)
+// version 20111213: No change
+// version 20120105: No Change
 
 
 typedef struct {
