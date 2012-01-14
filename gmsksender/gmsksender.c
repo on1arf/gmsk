@@ -153,7 +153,7 @@ if (retval) {
 // do the actual hardware invention to switch the PTT
 
 if (global.lockfile) {
-	global.lockfd=open(global.lockfile, O_WRONLY|O_CREAT);
+	global.lockfd=open(global.lockfile, O_WRONLY|O_CREAT,  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
 	if (global.lockfd == -1) {
 		fprintf(stderr,"Error: Lockfile %s could not be opened or created!\n",global.lockfile);
