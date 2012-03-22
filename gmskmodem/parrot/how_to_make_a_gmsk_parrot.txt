@@ -1,0 +1,56 @@
+How to make a D-STAR parrot?
+
+
+One of the ways to try out the capabilities of the GMSKmodem is to use it for a GMSK "simplex repeater"
+(also known as a "parrot").
+
+
+* Download and compile the gmskmodem from github:
+https://github.com/on1arf/gmsk
+
+* create an new directory (e.g. called "echo")
+- in that directory, create another directory "done"
+
+
+* start TWO bash sessions:
+
+- In the first session, start the gmskmodem.
+
+These are the options I use on the friendlyarm mini2440 are:
+gmskmodem -format d -sit 12345 -soa hw:1 -ria hw:1 -rof echotest -ptt_tx /dev/ttySAC0
+
+-> -format d		: read and write files in the "DVTOOL" format
+
+-> -sit 12345		: GMSK SENDER INPUT: TCP port 12345
+(i.e. the gmsksender will listen on tcp port 12345 and exect data to be send out on that port)
+-> -soa hw:1		: GMSK SENDER OUTPUT: ALSA device hw:1 (which is in my case a USB audio-dongle)
+
+-> -ria hw:1		: GMSK RECEIVER INPUT: ALSA device hw:1 (same dongle as used for audio out)
+-> -rof echotest	: GMSK RECEIVER OUTPUT: FILES "echotest"
+(the information received by the modem will be writen to files called echotest-0000.dvtool; where
+the 4-digit number will go up for every file)
+
+-ptt_tx /dev/ttySAC0
+						: GMSK SENDER PTT driver: serial device /dev/ttySAC0
+(use either the options ptt_tx, ptt_cs or ptt_lf as needed on your board. Do "gmskmodem -h" for
+more info).
+
+
+
+- In the 2nd session, start run the "echo-dvtool.sh" bash-script.
+
+This script will
+- check every second if new audio files have been created by the gmskmodem
+- if found, send it back to the gmskmodem using "nc" (netcat). Afterwards, the file will be moved
+to the "done" directory.
+
+
+
+
+Feel free to give it a try!
+
+73
+Kristoff - ON1ARF
+2012/03/22
+
+
