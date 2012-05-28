@@ -1,0 +1,53 @@
+Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] [-lf PTTlockfile.lck] -format {d,r,s} [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} -sif {senderinputfilename | - } {-soa alsadevice | -sof senderoutputfile.raw} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender] 
+
+
+
+
+ Options:
+ -h: help (this text)
+ -v: verbose
+
+ -dvsystem: d (D-STAR), c (CODEC2)
+
+ -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw bitcopy) (RECEIVER AND SENDER)
+ -recformat: overwrites global format-setting for receiver
+
+ -rs: RAW-mode frame syncronisation pattern (default: 0x7650, as used by D-STAR) (RECEIVER)
+ -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)
+
+ -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)
+ -sb: length of silence at beginning of transmission (seconds)(SENDER)
+ -se: length of silence at end of transmission (seconds)(SENDER)
+
+ -resync:  resyncronize: overwrite 21-frame syncronisation pattern in slow-speed data with standard D-STAR pattern(SENDER)
+ -z: Zap (delete) D-STAR slow-speed data information(SENDER)
+ -lf: lockfile use to signal PTT switching
+ -m: add begin and end MARKERS to raw data output(RECEIVER)
+
+ -d: dump stream data(RECEIVER)
+ -dd: dump more stream data(RECEIVER)
+ -da: dump average audio-level data(RECEIVER)
+
+ -s: stereo: input alsa-device is stereo(RECEIVER)
+ -audioinvert: input audio inverted (needed for certain types of ALSA devices): 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)
+
+ RECEIVER INPUT AND OUTPUT:
+ -ria: INPUT ALSA DEVICE 
+ -rif: INPUT FILE
+
+ -rof: output filename (use - for stdout)
+ -rou: stream out received data over UDP (port + udp port needed)
+
+ SENDER INPUT AND OUTPUT:
+ -sif: input file (use - for stdin)
+ -sit: input TCP port
+ -siu: input UDP port
+
+ -soa: OUTPUT alsa device
+ -sof: OUTPUT file
+
+ -4: UDP host hostname lookup ipv4 only(RECEIVER)
+ -6: UDP host hostname lookup ipv6 only(RECEIVER)
+
+ -noreceiver: disables receiver module
+ -nosender: disables sender module
