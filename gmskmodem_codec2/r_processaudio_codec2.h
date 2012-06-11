@@ -10,6 +10,8 @@
 // version 20111130: end stream on signal drop. do not process noise data,
 //                   accept bits at startsync and descrable slow data
 // version 20120105: raw mode audio output
+// version 20120529: codec2 version
+// version 20120611: bitslip code added to codec2 version
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -70,6 +72,7 @@ int bitmatch;
 
 // flags that indicate certainty of good stream
 int missedsync;
+int syncfound;
 
 
 char marker; // 'S' (sync) , 'M' (missed) of 'E' (end) put at end of line 
@@ -361,7 +364,7 @@ while (!(thisfileend)) {
 
 				// we accept up to "BITERROR START SYN" penality points for errors
 				// (note: syncmask is initialised above, based on syncsize)
-				bitmatch=countdiff16(last2octets,syncmask,p_r_global->syncsize, p_r_global->syncpattern,BITERRORSSTARTSYN);
+				bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize, p_r_global->syncpattern,BITERRORSSTARTSYN);
 
 
 				if (bitmatch) {
@@ -447,13 +450,15 @@ while (!(thisfileend)) {
 			}; 
 
 			// end of checking, 
-			// go to next frame
+			// go to next bit
 			continue;
 		}; // end if (state 0)
 
 
 		// state 20: codec2 versionid
 		if (state == 20) {
+			unsigned char thisversionid;
+
 			if (p_r_global->dumpstream >= 2) {
 				printbit(bit,6,4,0);
 			}; // end if
@@ -470,155 +475,231 @@ while (!(thisfileend)) {
 				codec2_bitcount=0;
 			}; // end if
 
-			// did we receive all 24 bits?
-			if (codec2_octetcount >= 3) {
-				unsigned char thisversionid;
 
-				// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
-				fec13decode(&codec2versionid[0],&codec2versionid[1],&codec2versionid[2],&thisversionid);
+			// if not received all 24 bits, get next
+			if (codec2_octetcount < 3) {
+				continue;
+			}; // end if
 
-				// currently only versionid "0x11" is accepted (speed "1", mode "1");
 
-				// print individual version id fields 
-				if (p_g_global->verboselevel >= 2) {
-					fprintf(stderr,"codec2 versionid fields: %X %X %X\n",codec2versionid[0],codec2versionid[1],codec2versionid[2]);
+			// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
+			fec13decode(&codec2versionid[0],&codec2versionid[1],&codec2versionid[2],&thisversionid);
+
+
+			// print individual version id fields 
+			if (p_g_global->verboselevel >= 2) {
+				fprintf(stderr,"codec2 versionid fields: %X %X %X\n",codec2versionid[0],codec2versionid[1],codec2versionid[2]);
+			}; // end if
+
+			// print version id
+			if (p_g_global->verboselevel >= 1) {
+				fprintf(stderr,"codec2 versionid = %X \n",thisversionid);
+			}; // end if
+
+
+			// check version
+			// currently only versionid "0x11" is accepted (speed "1", mode "1");
+			if (thisversionid != 0x11) {
+				// unknown version id
+				fprintf(stderr,"Error: processaudio_codec2: unsupported version id %x\n",thisversionid);
+
+				// re-init vars
+				syncreceived=0;
+				last2octets=0;
+
+				state=0;
+
+				// next bit
+				continue;
+			}; // end if
+
+
+			// OK, we have a valid versionid.
+
+			// open output, so we can send out "begin" marker if needed
+
+			// open Output Destination Abstraction layer
+			if (!(outputopen)) {
+				retval=output_dal(IDAL_CMD_OPEN,NULL,0,&retval2,retmsg);
+
+				if (retval == IDAL_RET_SUCCESS) {
+					outputopen=1;
+				} else {
+					// open failed
+					fprintf(stderr,"%s",retmsg);
+				}; // end if
+			}; // end if
+
+
+			// write marker if requested
+			if ((outputopen) && (p_r_global->sendmarker)) {
+				// send marker for begin DSTAR stream
+				retval=output_dal(IDAL_CMD_WRITE,"CODEC2STREAMBEGIN.\n",16,&retval2,retmsg);
+
+				if (retval != IDAL_RET_SUCCESS) {
+					// open failed
+					fprintf(stderr,"%s",retmsg);
 				}; // end if
 
-				// print version id
-				if (p_g_global->verboselevel >= 1) {
-					fprintf(stderr,"codec2 versionid = %X \n",thisversionid);
-				}; // end if
-
-
-				if (thisversionid != 0x11) {
-					// unknown version id
-					fprintf(stderr,"Error: processaudio_codec2: unsupported version id %x\n",thisversionid);
-
-					// re-init vars
-					syncreceived=0;
-					last2octets=0;
-
-					state=0;
-
-					// next bit
-					continue;
-				}; // end if
-
-
-				// OK, we have a valid versionid.
-
-				// open output, so we can send out "begin" marker if needed
-
-				// open Output Destination Abstraction layer
-				if (!(outputopen)) {
-					retval=output_dal(IDAL_CMD_OPEN,NULL,0,&retval2,retmsg);
-
-					if (retval == IDAL_RET_SUCCESS) {
-						outputopen=1;
-					} else {
-						// open failed
-						fprintf(stderr,"%s",retmsg);
-					}; // end if
-				}; // end if
-
-
-				if ((outputopen) && (p_r_global->sendmarker)) {
-					// send marker for begin DSTAR stream
-					retval=output_dal(IDAL_CMD_WRITE,"CODEC2STREAMBEGIN.\n",16,&retval2,retmsg);
-
-					if (retval != IDAL_RET_SUCCESS) {
-						// open failed
-						fprintf(stderr,"%s",retmsg);
-					}; // end if
-
-				}; // end if
+			}; // end if
 				
 
-				// new state: 21 (codec2 data frame)
-				state=21;
+			// new state: 21 (codec2 data frame)
+			state=21;
 
-				// init some vars
-				last4octets=0;
+			// init some vars
+			last4octets=0;
 
-				codec2_octetcount=0;
-				codec2_bitcount=0;
+			codec2_octetcount=0;
+			codec2_bitcount=0;
 
-				memset(codec2inframe,0,24); // clear codec2inframe
+			memset(codec2inframe,0,24); // clear codec2inframe
 
-				framesnoise=0;
+			framesnoise=0;
 
-				missedsync=0;
+			missedsync=0;
 
-				// reset print-bit to beginning of stream
-				if (p_r_global->dumpstream >= 2) {
-					putchar(0x0a); // ASCII 0x0a = linefeed
-				}; // end if
-				printbit(-1,0,0,0);
+			syncfound=0;
+
+			// reset print-bit to beginning of stream
+			if (p_r_global->dumpstream >= 2) {
+				putchar(0x0a); // ASCII 0x0a = linefeed
+			}; // end if
+			printbit(-1,0,0,0);
 
 
-			}; // end if (all 24 bits read, processing codec2 versionid)
-
-		continue;
+			// go to next bit
+			continue;
 		}; // end if (state 20)
 
 		// state 21: codec2: main part of stream
 		if (state == 21) {
 
 
-			// read up to 192 bits
+			// READING the main part of the stream
+			// the first 32 bits are read into the "last4octets" var
+			// this is easier to process bitslips (after reading the 24-bit header) as this is mainly
+			// "bit" operations
+			// after reading/processing these 32 bits, they are copied into "codec2inframe" memory
+			// the last 160 bits are read directly into the "codec2inframe" structure
+			// keep track of last 32 bits (used to determine bitslips)
+			last4octets>>=1;
+			if (bit) {
+				last4octets |= 0x80000000;
+			}; // end if
 
-			// reset char before setting first bits
-			if (codec2_bitcount == 0) {
-				codec2inframe[codec2_octetcount] = 0;
-			}; // end if 
+//printf("bitcount %d octetcount %d marker %X (%c) missedsync %d\n",codec2_bitcount,codec2_octetcount, marker,marker, missedsync);
+			if (codec2_octetcount < 4) {
+				codec2_bitcount++;
 
-			if (codec2_octetcount <= 23) {
-				if (bit) {
-					codec2inframe[codec2_octetcount] |= bit2octet[codec2_bitcount];
+				if (codec2_bitcount < 32) {
+					// bitslip tests
+
+
+					// only do test if sync not yet found and no resync yet done
+					if (!syncfound) {
+						if (codec2_bitcount == 24) {
+							// check sync pattern (first 24 bits), allow up to 3 biterrors
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 3)) {
+								marker='S';
+								missedsync=0;
+								endfound=0;
+								syncfound=1; // no further checks needed;
+							} else if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 3)) {
+								marker='E';
+								endfound=1;
+								syncfound=1; // no further checks needed;
+							 }; // end elsif - if
+
+						} else if ((codec2_bitcount == 23) || (codec2_bitcount == 25)) {
+							// bitslip +1 or -1 bit
+							// check sync pattern (first 24 bits), allow up to 1 biterror
+							// if found, correct "bitcount" value
+
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 1)) {
+								marker='T';
+								missedsync=0;
+								endfound=0;
+								syncfound=1; // no further checks needed
+								codec2_bitcount=24; // correct bit position
+							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 1)) {
+								marker='F';
+								endfound=1;
+								syncfound=1; // no further checks needed
+								codec2_bitcount=24; // correct bit position
+							 }; // end elsif - if
+						} else if ((codec2_bitcount == 22) || (codec2_bitcount == 26)) {
+							// bitslip +2 or -2 bit
+							// check sync pattern (first 24 bits), allow no biterror
+							// if found, correct "bitcount" value
+
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 0)) {
+								marker='U';
+								missedsync=0;
+								endfound=0;
+								syncfound=1; // no further checks needed
+								codec2_bitcount=24; // correct bit position
+							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 0)) {
+								marker='G';
+								endfound=1;
+								syncfound=1; // no further checks needed
+								codec2_bitcount=24; // correct bit position
+							}; // end elseif - if
+						}; // end elsif - elsif - if
+					}; // end if (! sync found)
+				} else {
+					// 32 bits received. Copy them over to the codec2inframe structure
+					// note that the octet order is reversed
+
+					// copy octet per octet as we are not sure how a 32bit integer structure is stored in memory
+					codec2inframe[3]=(unsigned char)last4octets & 0xff;
+					codec2inframe[2]=(unsigned char)(last4octets & 0xff00) >> 8;
+					codec2inframe[1]=(unsigned char)(last4octets & 0xff0000) >> 16;
+					codec2inframe[0]=(unsigned char)(last4octets & 0xff000000) >> 24;
+
+					codec2_octetcount = 4;
+					codec2_bitcount=0;
 				}; // end if
 			} else {
-				fprintf(stderr,"Warning: codec2inframe Boundary protection: %d \n",codec2_octetcount);
+			// after the first 32 bits, read up to 192 bits
+
+				if (codec2_octetcount <= 23) {
+					if (bit) {
+						codec2inframe[codec2_octetcount] |= bit2octet[codec2_bitcount];
+					}; // end if
+				} else  {
+					fprintf(stderr,"Warning: codec2inframe Boundary protection: %d \n",codec2_octetcount);
+				}; // end else - if
+
+				codec2_bitcount++;
+
+				if (codec2_bitcount >= 8) {
+					codec2_octetcount++;
+					codec2_bitcount=0;
+				}; // end if
+
 			}; // end else - if
 
-			codec2_bitcount++;
-
-			if (codec2_bitcount >= 8) {
-				codec2_octetcount++;
-				codec2_bitcount=0;
-			}; // end if
 
 			// go to next bit if not yet 192 bits received
 			if (codec2_octetcount <= 23) {
 				// print bits if requested
 				if (p_r_global->dumpstream >= 2) {
-					printbit(bit,6,4,0);
+					printbit(bit,12,2,0);
 				}; // end if
 
 				continue;
 			}; // end if
 
-			// 192 bits (24 octets) received
-			// reset counters
-			codec2_octetcount=0;
-			codec2_bitcount=0;
-
-
-			// check sync pattern (first 24 bits)
-			if ((codec2inframe[0] == 0xe7) && (codec2inframe[1] == 0x08) && (codec2inframe[2] == 0x5c)) {
-				marker='S';
-				missedsync=0;
-				endfound=0;
-			} else if ((codec2inframe[0] == 0x7e) && (codec2inframe[1] == 0x80) && (codec2inframe[2] == 0xc5)) {
-				marker='E';
-				endfound++;
-			} else {
+			// if no sync found
+			if (!syncfound) {
 				marker='M';
 				missedsync++;
-			}; // end else - of
+			}; // end if
 
 
 			if (p_r_global->dumpstream >= 2) {
-				printbit(bit,6,4,marker);
+				printbit(bit,12,2,marker);
 			}; // end if
 
 			// we have received a full frame, apply FEC
@@ -631,10 +712,11 @@ while (!(thisfileend)) {
 
 				for (loop=0; loop < 7; loop++) {
 					totalerror += fec13decode(p1,p2,p3,d);
+//printf("totalerror = %d \n",totalerror);
 					p1++; p2++; p3++; d++;
 				}; // end for
 
-				if (p_g_global->verboselevel >= 2) {
+				if (p_g_global->verboselevel >= 3) {
 					printf("Number of bit errors: %d\n\n",totalerror);
 				}; // end if
 			}; // end for
@@ -674,24 +756,22 @@ while (!(thisfileend)) {
 			}; // end if
 
 
-			// if not end, go to next frame
-			if (!endfound) {
-				continue;
-			}; // end if
-
-
 			
 			// things to do at end of frame
 
 			// re-init vars
-			last2octets=0;
-			syncreceived=0; 
-			state=0;
+			codec2_octetcount=0;
+			codec2_bitcount=0;
+			syncfound=0;
+			// clear memory for new frame
+			memset(codec2inframe,0,24);
+
 
 			// reset counters of printbit function
 			printbit(-1,0,0,0);
 
 
+			// write marker if requested
 			if ((outputopen) && (p_r_global->sendmarker)) {
 				retval=output_dal(IDAL_CMD_WRITE,"DSTARSTREAMEND.",15,&retval2,retmsg);
 				if (retval != IDAL_RET_SUCCESS) {
@@ -699,6 +779,15 @@ while (!(thisfileend)) {
 					fprintf(stderr,"%s",retmsg);
 				}; // end if
 			}; // end if
+
+
+			// if not end, go to next frame
+			if (!endfound) {
+				continue;
+			}; // end if
+
+			// END FOUND!!!
+			// things to do at the end of the stream
 
 
 			// close output
@@ -712,6 +801,15 @@ while (!(thisfileend)) {
 					outputopen=0;
 				}; // end if
 			}; // end if
+
+
+			// reinit vars
+			last2octets=0;
+			syncreceived=0; 
+			state=0; // new state is 0, "waiting for sync"
+
+
+			// get next audio-frame to look for new stream
 
 			continue;
 		}; // end if (state 21)

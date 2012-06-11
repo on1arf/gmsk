@@ -10,6 +10,7 @@
 // version 20111130: end stream on signal drop. do not process noise data,
 //                   accept bits at startsync and descrable slow data
 // version 20120105: raw mode audio output
+// version 20120529: moved dstar related code to seperate file
 
 /*
  *      Copyright (C) 2011 by Kristoff Bonne, ON1ARF
@@ -419,11 +420,11 @@ while (!(thisfileend)) {
 				// syncmask is initialised above, based on syncsize
 				if (syncreceived > 20) {
 					syncAA=0;
-					bitmatch=countdiff16(last2octets,syncmask,p_r_global->syncsize,
+					bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize,
 						p_r_global->syncpattern,BITERRORSSTARTSYN);
 				} else {
 					syncAA=1;
-					bitmatch=countdiff16(last2octets,syncmask,p_r_global->syncsize,
+					bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize,
 						p_r_global->syncpattern,0);
 				}; // end if
 
