@@ -103,7 +103,9 @@
 
 // support functions for receiver and sender
 #include "parsecliopts.h"
-#include "initalsa.h"
+#ifdef _USEALSA
+	#include "initalsa.h"
+#endif
 
 // support functions for receiver
 #include "r_printbit.h"
@@ -112,7 +114,11 @@
 #include "r_output_dal.h"
 
 // functions used by main program for receiver
-#include "r_capture.h"
+#include "r_filein.h"
+#ifdef _USEALSA
+	#include "r_capture.h"
+#endif
+
 #include "r_processaudio_dstar.h"
 #include "r_processaudio_raw.h"
 #include "r_processaudio_codec2.h"
@@ -128,8 +134,10 @@
 #include "s_input_raw.h"
 #include "s_input_dstar.h"
 #include "s_input_codec2.h"
-#include "s_alsaout.h"
-#include "s_ptt.h"
+#ifdef _USEALSA
+	#include "s_alsaout.h"
+	#include "s_ptt.h"
+#endif
 
 
 /////////////////////////////////////////
@@ -149,21 +157,26 @@ int numbuffer;
 int loop;
 int size;
 
-// vars for timed interrupts
-struct sigaction s_sa;
-struct sigevent s_sev;
-timer_t s_timerid;
-struct itimerspec s_its;
+#ifdef _USEALSA
+	// vars for timed interrupts
+	struct sigaction s_sa;
+	struct sigevent s_sev;
+	timer_t s_timerid;
+	struct itimerspec s_its;
+#endif
 
 
 // threads
-pthread_t thr_r_capture, thr_r_processaudio, thr_s_writefile, thr_s_input, thr_s_gmskmodulate, thr_s_ptt;
+pthread_t thr_r_input, thr_r_processaudio, thr_s_writefile, thr_s_input, thr_s_gmskmodulate;
+
+#ifdef _USEALSA
+	pthread_t thr_s_ptt;
+#endif
 
 
 ///////////////////////////////////
 // APPLICATION STARTS HERE ////////
 ///////////////////////////////////
-
 
 // fill in combined data structure
 c_global.p_r_global=&r_global;
@@ -220,65 +233,74 @@ if (!s_global.disable) {
 	pthread_create(&thr_s_gmskmodulate, NULL, funct_s_modulateandbuffer, (void *) &s_global);
 
 
-	// start "PTT" thread.
-	if (s_global.pttcsdevice) {
-		pthread_create(&thr_s_ptt, NULL, funct_pttcs, (void *) &c_global);
-	} else if (s_global.ptttxdevice) {
-		pthread_create(&thr_s_ptt, NULL, funct_ptttx, (void *) &c_global);
-	} else if (s_global.pttlockfile) {
-		pthread_create(&thr_s_ptt, NULL, funct_pttlockfile, (void *) &c_global);
-	}; // end elsif - elsif - if
+	#ifdef _USEALSA
+		// start "PTT" thread.
+		if (s_global.pttcsdevice) {
+			pthread_create(&thr_s_ptt, NULL, funct_pttcs, (void *) &c_global);
+		} else if (s_global.ptttxdevice) {
+			pthread_create(&thr_s_ptt, NULL, funct_ptttx, (void *) &c_global);
+		} else if (s_global.pttlockfile) {
+			pthread_create(&thr_s_ptt, NULL, funct_pttlockfile, (void *) &c_global);
+		}; // end elsif - elsif - if
+	#endif
 
 	// SENDER OUTPUT
 
-	// start file out or alsa out
-	if (s_global.fileoralsa == 0) {
+	#ifdef _USEALSA
+		// start file out or alsa out
+		if (s_global.fileoralsa == 0) {
+			pthread_create(&thr_s_writefile, NULL, funct_writefile, (void *) &s_global);
+		} else if (s_global.fileoralsa == 1) {
+			// Set up interrupt handler for signal SIG, pointing to
+			// function 'alsaout'
+			s_sa.sa_flags=0;
+			s_sa.sa_handler = funct_alsaout;
+			sigemptyset(&s_sa.sa_mask);
+
+			retval=sigaction(SIG,&s_sa,NULL);
+			if (retval < 0) {
+				fprintf(stderr,"error in sigaction: function alsaout!\n");
+				exit(-1);
+			}; // end if
+
+
+			/* Create the timer */
+			s_sev.sigev_notify = SIGEV_SIGNAL;
+			s_sev.sigev_signo = SIG;
+			s_sev.sigev_value.sival_ptr = &s_timerid;
+			retval=timer_create(CLOCKID, &s_sev, &s_timerid);
+			if (retval < 0) {
+				fprintf(stderr,"error in timer_create timer: function alsaout!\n");
+				exit(-1);
+			}; // end if
+
+			// Configured timed interrupt, that will trigger a "SIG" interrupt
+			// every 20 ms
+
+			// start timed function timer capture, every 20 ms, offset is 1 second to
+			// avoid "starvation" of the main thread by the capture thread (is started
+			// every 20 ms and takes just a little bit then 20 ms to execute)
+			s_its.it_value.tv_sec = 1;
+			s_its.it_value.tv_nsec = 0;
+			s_its.it_interval.tv_sec = 0;
+			s_its.it_interval.tv_nsec = 20000000; // 20 ms = 20 million nanoseconds
+
+			retval=timer_settime(s_timerid, 0, &s_its, NULL);
+
+			if (retval < 0) {
+				fprintf(stderr,"error in timer_settime timer: function capture!\n");
+				exit(-1);
+			}; // end if
+		} else {
+			// error
+			fprintf(stderr,"Error: Output should be either FILE or ALSA!\n");
+			exit(-1);
+		}; // end elsif - if
+	#else 
+	// NO alsa -> only file output possible
 		pthread_create(&thr_s_writefile, NULL, funct_writefile, (void *) &s_global);
-	} else if (s_global.fileoralsa == 1) {
-		// Set up interrupt handler for signal SIG, pointing to
-		// function 'alsaout'
-		s_sa.sa_flags=0;
-		s_sa.sa_handler = funct_alsaout;
-		sigemptyset(&s_sa.sa_mask);
+	#endif
 
-		retval=sigaction(SIG,&s_sa,NULL);
-		if (retval < 0) {
-			fprintf(stderr,"error in sigaction: function alsaout!\n");
-			exit(-1);
-		}; // end if
-
-		/* Create the timer */
-		s_sev.sigev_notify = SIGEV_SIGNAL;
-		s_sev.sigev_signo = SIG;
-		s_sev.sigev_value.sival_ptr = &s_timerid;
-		retval=timer_create(CLOCKID, &s_sev, &s_timerid);
-		if (retval < 0) {
-			fprintf(stderr,"error in timer_create timer: function alsaout!\n");
-			exit(-1);
-		}; // end if
-
-		// Configured timed interrupt, that will trigger a "SIG" interrupt
-		// every 20 ms
-
-		// start timed function timer capture, every 20 ms, offset is 1 second to
-		// avoid "starvation" of the main thread by the capture thread (is started
-		// every 20 ms and takes just a little bit then 20 ms to execute)
-		s_its.it_value.tv_sec = 1;
-		s_its.it_value.tv_nsec = 0;
-		s_its.it_interval.tv_sec = 0;
-		s_its.it_interval.tv_nsec = 20000000; // 20 ms = 20 million nanoseconds
-
-		retval=timer_settime(s_timerid, 0, &s_its, NULL);
-
-		if (retval < 0) {
-			fprintf(stderr,"error in timer_settime timer: function capture!\n");
-			exit(-1);
-		}; // end if
-	} else {
-		// error
-		fprintf(stderr,"Error: Output should be either FILE or ALSA!\n");
-		exit(-1);
-	}; // end elsif - if
 }; // end if (sender not disabled)
 
 
@@ -286,16 +308,21 @@ if (!s_global.disable) {
 if (!r_global.disable) {
 	// RECEIVER INPUT
 
-	// INIT ALSA or FILE (depending on CLI options)
-	if (r_global.fileorcapture == 0) {
-		retval=init_alsa_capture(retmsg);
-	} else if (r_global.fileorcapture == 1) {
+	#ifdef _USEALSA 
+		// INIT ALSA or FILE (depending on CLI options)
+		if (r_global.fileorcapture == 0) {
+			retval=init_alsa_capture(retmsg);
+		} else if (r_global.fileorcapture == 1) {
+			retval=init_infile(retmsg);
+		} else {
+			// not capture or file input
+			fprintf(stderr,"Error: invalid value for file-or-capture. Shouldn't happen!\n");
+			exit(-1);
+		}; // end else - elsif - if
+	#else
+		// NO ALSA -> only file input possible
 		retval=init_infile(retmsg);
-	} else {
-		// not capture or file input
-		fprintf(stderr,"Error: invalid value for file-or-capture. Shouldn't happen!\n");
-		exit(-1);
-	}; // end else - elsif - if
+	#endif
 	
 	// return message?
 	if (retval < 0) {
@@ -318,13 +345,18 @@ if (!r_global.disable) {
 	}; // end else - if
 
 
-	if (r_global.fileorcapture == 0) {
-		// if ALSA, get frame size from information returned by alsa drivers
-		size = r_global.frames * octetpersample;
-	} else {
+	#ifdef _USEALSA
+		if (r_global.fileorcapture == 0) {
+			// if ALSA, get frame size from information returned by alsa drivers
+			size = r_global.frames * octetpersample;
+		} else {
+			// file, size is fixed: 960 samples
+			size=960 * octetpersample;
+		}; // end if
+	#else
 		// file, size is fixed: 960 samples
 		size=960 * octetpersample;
-	}; // end if
+	#endif
 
 	// create buffers
 	for (loop=0;loop<numbuffer;loop++) {
@@ -357,11 +389,19 @@ if (!r_global.disable) {
 	// it of from being constantly interrupted by the "capture"
 	// timed interrupt.
 
-	// POSIX thread "capture"
+	// POSIX thread "capture" or "filein"
+	#ifdef _USEALSA
+		if (r_global.fileorcapture) {
+			pthread_create(&thr_r_input, NULL, funct_r_filein, (void *) &c_global);
+		} else {
+			pthread_create(&thr_r_input, NULL, funct_r_capture, (void *) &c_global);
+		}; // end else - if
+	#else
+		// NO ALSA -> only file in 
+		pthread_create(&thr_r_input, NULL, funct_r_filein, (void *) &c_global);
+	#endif
 
 	// POSIX thread "processaudio"
-	pthread_create(&thr_r_capture, NULL, funct_r_capture, (void *) &c_global);
-
 	// start thread to process received audio
 	if ((g_global.format == 1) || (g_global.format == 2)) {
 		pthread_create(&thr_r_processaudio, NULL, funct_r_processaudio_dstar, (void *) &c_global);

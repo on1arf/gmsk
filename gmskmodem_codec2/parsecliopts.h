@@ -19,9 +19,14 @@
 
 int parsecliopts(int argc, char ** argv, char * retmsg) {
 
-char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] [-lf PTTlockfile.lck] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderout putfile.raw} [-noreceiver] [-nosender]\n";
-char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] [-lf PTTlockfile.lck] -format {d,r,s} [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} -sif {senderinputfilename | - } {-soa alsadevice | -sof senderoutputfile.raw} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650, as used by D-STAR) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (seconds)(SENDER)\n -se: length of silence at end of transmission (seconds)(SENDER)\n\n -resync:  resyncronize: overwrite 21-frame syncronisation pattern in slow-speed data with standard D-STAR pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -lf: lockfile use to signal PTT switching\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input alsa-device is stereo(RECEIVER)\n -audioinvert: input audio inverted (needed for certain types of ALSA devices): 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -ria: INPUT ALSA DEVICE \n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -soa: OUTPUT alsa device\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
+#ifdef _USEALSA
+char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] [-lf PTTlockfile.lck] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender]\n";
+char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] [-lf PTTlockfile.lck] -format {d,r,s} [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format codec2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (seconds)(SENDER)\n -se: length of silence at end of transmission (seconds)(SENDER)\n\n -resync:  resyncronize: overwrite 21-frame syncronisation pattern in slow-speed data with standard D-STAR pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -lf: lockfile use to signal PTT switching\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input alsa-device is stereo(RECEIVER)\n -audioinvert: input audio inverted (needed for certain types of ALSA devices): 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -ria: INPUT ALSA DEVICE \n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -soa: OUTPUT alsa device\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
+#else
+char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-noreceiver] [-nosender]\n";
+char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] -format {d,r,s} [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format CODEC2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (seconds)(SENDER)\n -se: length of silence at end of transmission (seconds)(SENDER)\n\n -resync:  resyncronize: overwrite D-STAR 21-frame syncronisation pattern in slow-speed data with standard pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input file is stereo(RECEIVER)\n -audioinvert: input audio inverted: 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
 
+#endif
 // local vars
 int paramloop;
 
@@ -35,7 +40,9 @@ int syncpatternin=0;
 // init vars
 
 // RECEIVER
+#ifdef _USEALSA
 r_global.fileorcapture=-1;
+#endif
 r_global.fnameout=NULL;
 r_global.outtostdout=0;
 r_global.dumpstream=0;
@@ -52,14 +59,16 @@ r_global.recformat=0;
 r_global.disable=0;
 
 // SENDER
-s_global.fnamein=NULL;
-s_global.infromstdin=0;
-s_global.fnameout=NULL;
+#ifdef _USEALSA
 s_global.alsaname=NULL;
 s_global.pttlockfile=NULL;
 s_global.pttcsdevice=NULL;
 s_global.ptttxdevice=NULL;
 s_global.ptt_invert=0;
+#endif
+s_global.fnamein=NULL;
+s_global.infromstdin=0;
+s_global.fnameout=NULL;
 s_global.fileoralsa=-1;
 s_global.silencebegin=DEFAULT_SILENCEBEGIN;
 s_global.silenceend=DEFAULT_SILENCEEND;
@@ -80,7 +89,28 @@ g_global.rawinvert=0;
 for (paramloop=1; paramloop <argc; paramloop++) {
 	char * thisarg=argv[paramloop];
 
-	if (strcmp(thisarg,"-ria") == 0) {
+
+
+	if (strcmp(thisarg,"-rif") == 0) {
+		// -rif: RECEIVER INPUT file name
+
+		#ifdef _USEALSA
+		if (r_global.fileorcapture == 0) {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: receiver ALSA input and file input are mutually exclusive\n");
+			return(-1);
+		}; // end if
+		#endif
+ 
+		// is there a next argument?
+		if (paramloop+1 < argc) {
+			paramloop++;
+			r_global.fnamein=argv[paramloop];
+			#ifdef _USEALSA
+			r_global.fileorcapture=1;
+			#endif
+		}; // end if
+	#ifdef _USEALSA
+	} else if (strcmp(thisarg,"-ria") == 0) {
 		// -ria: RECEIVER INPUT alsa device
 
 		if (r_global.fileorcapture == 1) {
@@ -94,20 +124,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 			r_global.capturedevice=argv[paramloop];
 			r_global.fileorcapture=0;
 		}; // end if
-	} else if (strcmp(thisarg,"-rif") == 0) {
-		// -rif: RECEIVER INPUT file name
-
-		if (r_global.fileorcapture == 0) {
-			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: receiver ALSA input and file input are mutually exclusive\n");
-			return(-1);
-		}; // end if
- 
-		// is there a next argument?
-		if (paramloop+1 < argc) {
-			paramloop++;
-			r_global.fnamein=argv[paramloop];
-			r_global.fileorcapture=1;
-		}; // end if
+	#endif
 	} else if (strcmp(thisarg,"-rou") == 0) {
 		// -rou: RECEIVER OUTPUT udphost udpport
 
@@ -252,21 +269,6 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 			return(-1);
 		}; // end else - if
 
-	} else if (strcmp(thisarg,"-ptt_cs") == 0) {
-		// -ptt_cs: serial device PTT control-signal
-
-		if ((s_global.pttlockfile) || (s_global.pttcsdevice) || (s_global.ptttxdevice)){
-		// PTT already defined
-			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: PTT serial device or Lockfile can only be defined once!\n%s\n",usage);
-			return(-1);
-		}; // end if
-
-		// is there a next argument?
-		if (paramloop+1 < argc) {
-			paramloop++;
-			s_global.pttcsdevice=argv[paramloop];
-		}; // end if
-
 	} else if (strcmp(thisarg,"-dvsystem") ==0) {
 		// codec: 1 (ambe d-star), 2 (codec2)
 
@@ -282,6 +284,22 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 				return(-1);
 			}; // end else - elsif - if
 
+		}; // end if
+
+	#ifdef _USEALSA
+	} else if (strcmp(thisarg,"-ptt_cs") == 0) {
+		// -ptt_cs: serial device PTT control-signal
+
+		if ((s_global.pttlockfile) || (s_global.pttcsdevice) || (s_global.ptttxdevice)){
+		// PTT already defined
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: PTT serial device or Lockfile can only be defined once!\n%s\n",usage);
+			return(-1);
+		}; // end if
+
+		// is there a next argument?
+		if (paramloop+1 < argc) {
+			paramloop++;
+			s_global.pttcsdevice=argv[paramloop];
 		}; // end if
 
 	} else if (strcmp(thisarg,"-ptt_tx") == 0) {
@@ -316,6 +334,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 	} else if (strcmp(thisarg,"-pttinvert") == 0) {
 		// -pttinvert
 		s_global.ptt_invert=1;
+	#endif
 	} else if (strcmp(thisarg,"-resync") == 0) {
 		// -s: resync
 		s_global.sync=1;
@@ -411,6 +430,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 			s_global.udpport=atoi(argv[paramloop]);
 		}; // end if
 
+	#ifdef _USEALSA
 	} else if (strcmp(thisarg,"-soa") == 0) {
 		// -soa: SENDER OUTPUT alsadevice
 
@@ -424,6 +444,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: Missing argument.\n%s\n",usage);
 			return(-1);
 		}; // end if
+	#endif
 	} else if (strcmp(thisarg,"-sof") == 0) {
 		if (s_global.fileoralsa==1) {
 			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: File-out and alsa-out are mutually exclusive.\n%s\n",usage);
@@ -541,10 +562,12 @@ if (g_global.dvsystem == 1) {
 
 // RECEIVER CHECKS
 if (!r_global.disable) {
+	#ifdef _USEALSA
 	if (r_global.fileorcapture == -1) {
 		snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: receiver input source missing.\n%s\n",usage);
 		return(-1);
 	}; // end if
+	#endif
 
 	if ((r_global.ipv4only) && (r_global.ipv6only)){
 		snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: IPv4-only and IPv6-only are mutually exclusive\n%s\n",usage);
@@ -596,6 +619,7 @@ if (!s_global.disable) {
 		return(1);
 	}; // end if
 
+	#ifdef _USEALSA
 	if ((s_global.fileoralsa == 0) && ((s_global.pttlockfile) || (s_global.pttcsdevice) || (s_global.ptttxdevice))) {
 		snprintf(retmsg,PARSECLIRETMSGSIZE,"Warning: PTT switching does not make sence when not using SENDER alsa-out. Ignored!\n");
 		s_global.pttlockfile=NULL;
@@ -603,6 +627,8 @@ if (!s_global.disable) {
 		s_global.ptttxdevice=NULL;
 		return(1);
 	}; // end if
+	#endif
+
 }; // end if (SENDER not disabled)
 
 

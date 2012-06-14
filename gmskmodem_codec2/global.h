@@ -63,10 +63,8 @@ typedef struct {
 	int fileend[256];
 	int sending[256];
 	int pntr_capture, pntr_process;
-	int fileorcapture; // 0 = capture, 1 = file
 	FILE * filein;
 	char * fnamein;
-	char * capturedevice;
 	snd_pcm_t *handle;
 	snd_pcm_uframes_t frames;
 	char * fnameout;
@@ -83,6 +81,12 @@ typedef struct {
 	int sendmarker;
 	int recformat; // 0=undef, 1=dvtool, 2=dstar stream, 10=raw, 20=codec2
 	int disable;
+
+	// data only used when ALSA is possible
+	#ifdef _USEALSA
+		int fileorcapture; // 0 = capture, 1 = file
+		char * capturedevice;
+	#endif
 } r_globaldatastr;
 
 // global data structure itself
@@ -117,18 +121,21 @@ typedef struct {
 	// file out
 	char * fnameout;
 
-	// ALSA
-	char * alsaname;
-	snd_pcm_t *alsahandle;
-	snd_pcm_uframes_t alsaframes;
-	int alsastate;
+	// only used when ALSA is possible
+	#ifdef _USEALSA
+		// ALSA
+		char * alsaname;
+		snd_pcm_t *alsahandle;
+		snd_pcm_uframes_t alsaframes;
+		int alsastate;
 
-	// PTT switching        
-	char * pttcsdevice;
-	char * ptttxdevice;
-	char * pttlockfile;
-	int ptton;
-	int ptt_invert;
+		// PTT switching        
+		char * pttcsdevice;
+		char * ptttxdevice;
+		char * pttlockfile;
+		int ptton;
+		int ptt_invert;
+	#endif
 
 	// flags from CLI options to application
 	int sync;

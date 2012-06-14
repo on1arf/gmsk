@@ -213,9 +213,13 @@ while (!(thisfileend)) {
 	thisbuffersize=p_r_global->buffersize[thisbuffer];
 	thisaudioaverage=p_r_global->audioaverage[thisbuffer];
 
-	if (p_r_global->fileorcapture) {
+	#ifdef _USEALSA
+		if (p_r_global->fileorcapture) {
+			thisfileend=p_r_global->fileend[thisbuffer];
+		}; // end if
+	#else
 		thisfileend=p_r_global->fileend[thisbuffer];
-	}; // end if
+	#endif
 
 
 	// PART1:
@@ -232,9 +236,11 @@ while (!(thisfileend)) {
 		// sleep for 10 ms (half of one audiosample), only when reading from ALSA device
 		// and we have he "had to wait" marker set
 
+		#ifdef _USEALSA
 		if ((hadtowait) && (p_r_global->fileorcapture == 0)) {	
 			usleep((useconds_t) 10000);
 		}; // end if
+		#endif
 
 		// reset "had to wait"
 		hadtowait=0;
@@ -269,9 +275,11 @@ while (!(thisfileend)) {
 		// sleep for 10 ms (half of one audiosample), only when reading from ALSA device
 		// and we have he "had to wait" marker set
 
+		#ifdef _USEALSA
 		if ((hadtowait) && (p_r_global->fileorcapture == 0)) {	
 			usleep((useconds_t) 10000);
 		}; // end if
+		#endif
 
 		// reset "had to wait"
 		hadtowait=0;
@@ -723,10 +731,12 @@ while (!(thisfileend)) {
 }; // end while (for capture: endless loop; for file: EOF)
 
 
+#ifdef _USEALSA
 if (p_r_global->fileorcapture == 0) {
 	// capture
 	fprintf(stderr,"Error: CAPTURE-THREAD TERMINATED for capture. Should not happen! \n");
 }; // end if
+#endif
 
 /// end program
 exit(0);

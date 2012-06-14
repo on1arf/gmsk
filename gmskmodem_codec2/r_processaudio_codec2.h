@@ -91,7 +91,11 @@ int averageleveltable[32];
 int averagelevelindex;
 int averagevalid;
 uint64_t averagetotal;
+
+// vars only used for alsa capture
+#ifdef _USEALSA
 int maxlevel;
+#endif
 
 
 // temp values to calculate maximum audio level
@@ -209,9 +213,11 @@ while (!(thisfileend)) {
 	thisbuffersize=p_r_global->buffersize[thisbuffer];
 	thisaudioaverage=p_r_global->audioaverage[thisbuffer];
 
+	#ifdef _USEALSA
 	if (p_r_global->fileorcapture) {
 		thisfileend=p_r_global->fileend[thisbuffer];
 	}; // end if
+	#endif
 
 
 
@@ -229,9 +235,11 @@ while (!(thisfileend)) {
 		// sleep for 10 ms (half of one audiosample), only when reading from ALSA device
 		// and we have he "had to wait" marker set
 
+		#ifdef _USEALSA
 		if ((hadtowait) && (p_r_global->fileorcapture == 0)) {	
 			usleep((useconds_t) 10000);
 		}; // end if
+		#endif
 
 		// reset "had to wait"
 		hadtowait=0;
@@ -266,9 +274,11 @@ while (!(thisfileend)) {
 		// sleep for 10 ms (half of one audiosample), only when reading from ALSA device
 		// and we have he "had to wait" marker set
 
+		#ifdef _USEALSA
 		if ((hadtowait) && (p_r_global->fileorcapture == 0)) {	
 			usleep((useconds_t) 10000);
 		}; // end if
+		#endif
 
 		// reset "had to wait"
 		hadtowait=0;
@@ -400,30 +410,32 @@ while (!(thisfileend)) {
 					}; // end for
 
 					
-					if (!p_r_global->fileorcapture) {
-					// test only makes sence for capture.
-					// it will be possible to overwrite this with an special option in a later release)
-						if (averagevalid) {
-							maxlevel = (averagetotal >> 8) * 13; // >>8=/256: divide by 16 (for 16 samples) and
-																		// then a 2nd time for get 13/16 of average total
-
-							if (thisaudioaverage < maxlevel) {
-								if (p_g_global->verboselevel >= 1) {
-									fprintf(stderr,"START STREAM: Average audio level: %04X, max: %04X\n",thisaudioaverage,maxlevel);
+					#ifdef _USEALSA
+						if (!p_r_global->fileorcapture) {
+						// test only makes sence for capture.
+						// it will be possible to overwrite this with an special option in a later release)
+							if (averagevalid) {
+								maxlevel = (averagetotal >> 8) * 13; // >>8=/256: divide by 16 (for 16 samples) and
+																			// then a 2nd time for get 13/16 of average total
+	
+								if (thisaudioaverage < maxlevel) {
+									if (p_g_global->verboselevel >= 1) {
+										fprintf(stderr,"START STREAM: Average audio level: %04X, max: %04X\n",thisaudioaverage,maxlevel);
+									}; // end if
+								} else {
+									if (p_g_global->verboselevel >= 1) {
+										fprintf(stderr,"START STREAM CANCELED - noiselevel %04X to high (max %04X)\n",thisaudioaverage, maxlevel);
+										continue;
+									}; // end if
 								}; // end if
 							} else {
 								if (p_g_global->verboselevel >= 1) {
-									fprintf(stderr,"START STREAM CANCELED - noiselevel %04X to high (max %04X)\n",thisaudioaverage, maxlevel);
+									fprintf(stderr,"START STREAM CANCELED - not yet enough data for noiselevel test\n");
 									continue;
 								}; // end if
 							}; // end if
-						} else {
-							if (p_g_global->verboselevel >= 1) {
-								fprintf(stderr,"START STREAM CANCELED - not yet enough data for noiselevel test\n");
-								continue;
-							}; // end if
-						}; // end if
-					}; // end if (capture)
+						}; // end if (capture)
+					#endif
 
 
 					// new state: 20 codec2 version id
@@ -822,10 +834,12 @@ while (!(thisfileend)) {
 }; // end while (for capture: endless loop; for file: EOF)
 
 
+#ifdef _USEALSA
 if (p_r_global->fileorcapture == 0) {
 	// capture
 	fprintf(stderr,"Error: CAPTURE-THREAD TERMINATED for capture. Should not happen! \n");
 }; // end if
+#endif
 
 /// end program
 exit(0);
