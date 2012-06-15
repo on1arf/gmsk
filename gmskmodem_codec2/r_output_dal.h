@@ -274,8 +274,8 @@ if (cmd == IDAL_CMD_OPEN) {
 
 		// fill in UDP port
 		udpsockaddr->sin6_family=AF_INET6;
-		udpsockaddr->sin6_scope_id=0; // scope not used here
 		udpsockaddr->sin6_port=htons((unsigned short int) r_global.udpout_port);
+		udpsockaddr->sin6_scope_id=0; // scope not used here
 
 
 		// create UDP socket
@@ -337,7 +337,7 @@ if (cmd == IDAL_CMD_WRITE) {
 		if ((int) numwrite < len) {
 			// check for error or eof
 			if (ferror(fileout)) {
-				snprintf(retmsg,ISALRETMSGSIZE,"Error: write fails in DAL_WRITE\n");
+				snprintf(retmsg,ISALRETMSGSIZE,"Error: write fails for file in DAL_WRITE\n");
 				*retval2=IDAL_ERR_CMDFAIL;
 				return(IDAL_RET_FAIL);
 			}
@@ -358,7 +358,7 @@ if (cmd == IDAL_CMD_WRITE) {
 
 		if (numsend < 0) {
 			// error 
-			snprintf(retmsg,ISALRETMSGSIZE,"Error: read failed reading TCP stream\n");
+			snprintf(retmsg,ISALRETMSGSIZE,"Error: write fails for UDP in DAL_WRITE: %d (%s)\n",errno,strerror(errno));
 			*retval2=IDAL_ERR_CMDFAIL;
 			return(IDAL_RET_FAIL);
 		};
