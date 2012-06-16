@@ -24,7 +24,6 @@ static int state;
 static int running;
 static int init=1;
 
-static int16_t * p_audiobegin;
 static int16_t * p_audioafterend;
 static int silencecounter;
 static int silencesize;
@@ -54,9 +53,6 @@ if (init) {
 
 	// no audio in queue
 	s_global.waiting_audio=1;
-
-	// init pointers
-	p_audiobegin= &s_global.buffer_audio[0];
 
 	//note: this points just AFTER the end of the audio-buffer
 	p_audioafterend = &s_global.buffer_audio[BUFFERSIZE_AUDIO];

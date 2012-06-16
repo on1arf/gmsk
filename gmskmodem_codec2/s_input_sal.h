@@ -67,7 +67,6 @@ static int udpsock=-1;
 
 static c_globaldatastr * p_c_global; 
 static s_globaldatastr * p_s_global;
-static g_globaldatastr * p_g_global;
 
 
 // other vars
@@ -101,7 +100,6 @@ if (cmd == ISAL_CMD_INIT) {
 
 	p_c_global = (c_globaldatastr *) data;
 	p_s_global = p_c_global->p_s_global;
-	p_g_global = p_c_global->p_g_global;
 
 	return(ISAL_RET_SUCCESS);
 }; // end if

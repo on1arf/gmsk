@@ -46,15 +46,12 @@ int bit, state;
 
 int countnoiseframe=0; // number of frames not processed due to average audio level > noise
 
-int filesize;
-
 int hadtowait;
 
 int syncmask;
 
 uint16_t last2octets;
 int syncreceived, syncFFreceived;
-int radioheaderreceived=0;
 
 int loop;
 int retval, retval2=0;
@@ -62,12 +59,6 @@ char retmsg[ISALRETMSGSIZE];
 int outputopen=0;
 
 int bitmatch;
-
-// flags that indicate certainty of good stream
-int syncAA;
-int crcerror;
-int missedsync;
-
 
 
 int16_t *samplepointer;
@@ -115,8 +106,6 @@ p_g_global=p_c_global->p_g_global;
 state=0;
 syncreceived=0; syncFFreceived=0;
 last2octets=0;
-
-syncAA=0; crcerror=0; missedsync=0;
 
 rawcarrierdrop=0;
 
@@ -177,7 +166,6 @@ if (p_r_global->stereo) {
 
 
 // init var
-filesize=0;
 countnoiseframe=0;
 hadtowait=0;
 
@@ -485,11 +473,9 @@ while (!(thisfileend)) {
 				// and only accept a full match
 				// syncmask is initialised above, based on syncsize
 				if (syncreceived > 20) {
-					syncAA=0;
 					bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize,
 						p_r_global->syncpattern,BITERRORSSTARTSYN);
 				} else {
-					syncAA=1;
 					bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize,
 						p_r_global->syncpattern,0);
 				}; // end if
@@ -559,9 +545,6 @@ while (!(thisfileend)) {
 					rawbuffer_bit=0;
 
 					p_rawbuffer=rawbuffer;
-
-					radioheaderreceived=0;
-
 
 
 					// reset print-bit to beginning of stream

@@ -76,7 +76,8 @@ static FILE * fileout;
 
 // vars for UDP out
 static int udpsocket=0;
-static struct sockaddr_in6 * udpsockaddr;
+static struct sockaddr_in6 * udpsockaddrv6;
+static struct sockaddr_in * udpsockaddrv4;
 
 static c_globaldatastr * p_c_global; 
 static r_globaldatastr * p_r_global;
@@ -89,6 +90,9 @@ static int methode=0;
 static int has_been_closed=0; // 0: not been closed before, 1: has been closed and can be reopened
 										// 2: has been clossed and may not be reopened
 static int filecount=0;
+
+static int v4orv6=-1;	// -1: unknow, 0: ipv4, 1: ipv6
+
 
 // command INIT
 // Input data = pointer to combined global data structure
@@ -107,6 +111,7 @@ if (cmd == IDAL_CMD_INIT) {
 	has_been_closed=0;
 	udpsocket=-1;
 	filecount=0;
+	v4orv6=-1;
 
 	p_c_global = (c_globaldatastr *) data;
 	p_r_global = p_c_global->p_r_global;
@@ -269,13 +274,22 @@ if (cmd == IDAL_CMD_OPEN) {
 			}; // end if
 		}; // end if
 
-		// store returned DNS info in socket address
-		udpsockaddr=(struct sockaddr_in6 *) info->ai_addr;
+		if (info->ai_family == AF_INET) {
+			// store returned DNS info in socket address
+			udpsockaddrv4=(struct sockaddr_in *) info->ai_addr;
+			v4orv6=0;
+			udpsockaddrv4->sin_family=AF_INET;
+			udpsockaddrv4->sin_port=htons((unsigned short int) r_global.udpout_port);
+		} else {
+			udpsockaddrv6=(struct sockaddr_in6 *) info->ai_addr;
+			v4orv6=1;
+			// fill in UDP port
+			udpsockaddrv6->sin6_family=AF_INET6;
+			udpsockaddrv6->sin6_port=htons((unsigned short int) r_global.udpout_port);
+			udpsockaddrv6->sin6_scope_id=0; // scope not used here
+		}; // end else - if
 
-		// fill in UDP port
-		udpsockaddr->sin6_family=AF_INET6;
-		udpsockaddr->sin6_port=htons((unsigned short int) r_global.udpout_port);
-		udpsockaddr->sin6_scope_id=0; // scope not used here
+
 
 
 		// create UDP socket
@@ -354,7 +368,15 @@ if (cmd == IDAL_CMD_WRITE) {
 	if (methode == 4) {
 		int numsend;
 
-		numsend=sendto(udpsocket,data,len,0,(struct sockaddr*)&udpsockaddr,sizeof(udpsockaddr));
+		if (v4orv6 == 0) {
+			numsend=sendto(udpsocket,data,len,0,(struct sockaddr*)udpsockaddrv4,sizeof(struct sockaddr_in));
+		} else if (v4orv6 == 1) {
+			numsend=sendto(udpsocket,data,len,0,(struct sockaddr*)udpsockaddrv6,sizeof(struct sockaddr_in6));
+		} else {
+			snprintf(retmsg,ISALRETMSGSIZE,"Error: Invalid value for v4orv6 in DAP_WRITE %d\n",v4orv6);
+			*retval2=IDAL_ERR_CMDFAIL;
+			return(IDAL_RET_FAIL);
+		}; // end if
 
 		if (numsend < 0) {
 			// error 

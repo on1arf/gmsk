@@ -36,7 +36,6 @@ int loop;
 int nextbuffer;
 char *p;
 
-int octetpersample;
 int channel;
 int buffermask;
 
@@ -52,22 +51,18 @@ int framesreceived;
 c_globaldatastr * p_c_global;
 r_globaldatastr * p_r_global;
 g_globaldatastr * p_g_global;
-s_globaldatastr * p_s_global;
 
 p_c_global=(c_globaldatastr *) c_globaldatain;
 
 p_r_global=p_c_global->p_r_global;
 p_g_global=p_c_global->p_g_global;
-p_s_global=p_c_global->p_s_global;
 
 
 // init
 if (p_r_global->stereo) {
-	octetpersample=4;
 	channel=2;
 	buffermask=0x7f; // 128 buffers : 0x00 to 0x7f
 } else {
-	octetpersample=2;
 	channel=1;
 	buffermask=0xff; // 256 buffers : 0x00 to 0xff
 }; // end else - if
