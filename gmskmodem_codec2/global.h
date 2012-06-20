@@ -40,6 +40,9 @@
 
                               // margin above what level a received audio-sample is concidered noise
 #define MAXAUDIOLEVEL_MARGIN 1.4
+#define DISABLE_AUDIOLEVELCHECK 1 // set to "1" to disable audio level check, else set to "0"
+
+
 
 // defines for sender
 #define BUFFERSIZE_AUDIO 240000 // 5 seconds  

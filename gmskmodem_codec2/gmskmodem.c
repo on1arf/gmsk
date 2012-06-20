@@ -99,7 +99,11 @@
 #include "dvtool.h"
 
 // 1/3 fec (used by codec2)
-#include "fec13.h"
+#include "c2_fec13.h"
+
+// scrambler and interleaver for codec2
+#include "c2_scramble.h"
+#include "c2_interleave.h"
 
 // support functions for receiver and sender
 #include "parsecliopts.h"

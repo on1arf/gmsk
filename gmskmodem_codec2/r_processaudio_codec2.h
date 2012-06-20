@@ -67,15 +67,16 @@ int retval, retval2=0;
 char retmsg[ISALRETMSGSIZE];
 int outputopen=0;
 
-int endfound;
+int endfound=0;
 int bitmatch;
+int framecount=0;
 
 // flags that indicate certainty of good stream
 int missedsync;
-int syncfound;
+int syncfound=0;
 
 
-char marker; // 'S' (sync) , 'M' (missed) of 'E' (end) put at end of line 
+char marker=0; // 'S' (sync) , 'M' (missed) of 'E' (end) put at end of line 
 
 int16_t *samplepointer;
 int channel;
@@ -424,14 +425,22 @@ while (!(thisfileend)) {
 									}; // end if
 								} else {
 									if (p_g_global->verboselevel >= 1) {
-										fprintf(stderr,"START STREAM CANCELED - noiselevel %04X to high (max %04X)\n",thisaudioaverage, maxlevel);
-										continue;
+										if (DISABLE_AUDIOLEVELCHECK != 1) {
+											fprintf(stderr,"START STREAM CANCELED - noiselevel %04X to high (max %04X)\n",thisaudioaverage, maxlevel);
+											continue;
+										} else {
+											fprintf(stderr,"START STREAM WARNING - noiselevel %04X to high (max %04X). NOT STOPPED\n",thisaudioaverage, maxlevel);
+										}; // end else - if
 									}; // end if
 								}; // end if
 							} else {
 								if (p_g_global->verboselevel >= 1) {
-									fprintf(stderr,"START STREAM CANCELED - not yet enough data for noiselevel test\n");
-									continue;
+									if (DISABLE_AUDIOLEVELCHECK != 1) {
+										fprintf(stderr,"START STREAM CANCELED - not yet enough data for noiselevel test\n");
+										continue;
+									} else {
+										fprintf(stderr,"START STREAM WARNING - not yet enough data for noiselevel test. NOT STOPPED.\n");
+									}; // end else - if
 								}; // end if
 							}; // end if
 						}; // end if (capture)
@@ -495,7 +504,7 @@ while (!(thisfileend)) {
 
 
 			// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
-			fec13decode(&codec2versionid[0],&codec2versionid[1],&codec2versionid[2],&thisversionid);
+			fec13decode(codec2versionid[0],codec2versionid[1],codec2versionid[2],&thisversionid);
 
 
 			// print individual version id fields 
@@ -568,6 +577,7 @@ while (!(thisfileend)) {
 			memset(codec2inframe,0,24); // clear codec2inframe
 
 			framesnoise=0;
+			framecount=0;
 
 			missedsync=0;
 
@@ -664,10 +674,10 @@ while (!(thisfileend)) {
 					// note that the octet order is reversed
 
 					// copy octet per octet as we are not sure how a 32bit integer structure is stored in memory
-					codec2inframe[3]=(unsigned char)last4octets & 0xff;
-					codec2inframe[2]=(unsigned char)(last4octets & 0xff00) >> 8;
-					codec2inframe[1]=(unsigned char)(last4octets & 0xff0000) >> 16;
-					codec2inframe[0]=(unsigned char)(last4octets & 0xff000000) >> 24;
+					codec2inframe[0]=(unsigned char)last4octets & 0xff;
+					codec2inframe[1]=(unsigned char)(last4octets >> 8) & 0xff;
+					codec2inframe[2]=(unsigned char)(last4octets >> 16) & 0xff;
+					codec2inframe[3]=(unsigned char)(last4octets >> 24) & 0xff;
 
 					codec2_octetcount = 4;
 					codec2_bitcount=0;
@@ -714,18 +724,49 @@ while (!(thisfileend)) {
 				printbit(bit,12,2,marker);
 			}; // end if
 
-			// we have received a full frame, apply FEC
+			// we have received a full frame:
+
+			// 1: apply scrambling
+
+			// we have up to 25 lines of know exor-patterns
+			if (framecount >= 25) {
+				framecount=0;
+			}; // end if
+
+
 			{
-				unsigned char *p1, *p2, *p3, *d;
+				unsigned char *c1, *c2;
+				int loop;
+
+				c1=&scramble_exor[framecount][0];
+				// descramblink chars 3 up to 24 (starting at 0)
+				c2=&codec2inframe[3];
+
+				// descramble 21 chars
+				for (loop=0; loop < 21; loop++) {
+					*c2 ^= *c1;
+					c2++; c1++;
+				}; // end for
+
+			}; 
+
+			// increase framecounter; no need to do boundary check, happens above
+			framecount++;
+
+
+			// 2: apply FEC, including interleaving
+			{
+				unsigned char *p1, *d;
 				int totalerror=0;
 
-				p1=&codec2inframe[3]; p2=&codec2inframe[10]; p3=&codec2inframe[17];
+//fprintf(stderr,"X %02X %02X %02X \n",codec2inframe[0],codec2inframe[1],codec2inframe[2]);
+				p1=&codec2inframe[3];
 				d=codec2frame;
 
 				for (loop=0; loop < 7; loop++) {
-					totalerror += fec13decode(p1,p2,p3,d);
-//printf("totalerror = %d \n",totalerror);
-					p1++; p2++; p3++; d++;
+//fprintf(stderr,"%d %02X %02X %02X \n",loop,*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]]);
+					totalerror += fec13decode(*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]],d);
+					p1++; d++;
 				}; // end for
 
 				if (p_g_global->verboselevel >= 3) {

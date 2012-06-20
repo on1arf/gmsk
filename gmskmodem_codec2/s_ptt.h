@@ -39,6 +39,7 @@ p_s_global=p_c_global->p_s_global;
 p_g_global=p_c_global->p_g_global;
 
 int action;
+int ret;
 int lockfd=-1;
 // open (create if needed) PTTlockfile.
 // The sender application will set up a POSIX lock on that file
@@ -72,9 +73,18 @@ while (FOREVER) {
 	}; // end if
 
 	if (action) {
-		lockf(lockfd,F_TLOCK,0);
+		ret=lockf(lockfd,F_TLOCK,0);
+
+		if (ret < 0) {
+			fprintf(stderr,"Error: PTT lock serial device %s failed! Reason %d (%s)\n",p_s_global->pttcsdevice,errno,strerror(errno));
+			exit(-1);
+		}; // end if
 	} else {
-		lockf(lockfd,F_ULOCK,0);
+		ret=lockf(lockfd,F_ULOCK,0);
+		if (ret < 0) {
+			fprintf(stderr,"Error: PTT lock serial device %s failed! Reason %d (%s)\n",p_s_global->pttcsdevice,errno,strerror(errno));
+			exit(-1);
+		}; // end if
 	};
 
 }; // end while
@@ -185,6 +195,7 @@ p_g_global=p_c_global->p_g_global;
 int fd_serial;
 int action;
 int ret;
+int loop;
 
 struct termios tio;
 
@@ -239,10 +250,13 @@ while (FOREVER) {
 
 	if (action) {
 		// write 4 time 96 octets; which is 384 octets and takes 100 ms at 38400 bps
-		write(fd_serial,serialoutbuffer,sizeof(serialoutbuffer));
-		write(fd_serial,serialoutbuffer,sizeof(serialoutbuffer));
-		write(fd_serial,serialoutbuffer,sizeof(serialoutbuffer));
-		write(fd_serial,serialoutbuffer,sizeof(serialoutbuffer));
+		for (loop=0; loop <= 3; loop++) {
+			ret=write(fd_serial,serialoutbuffer,sizeof(serialoutbuffer));
+			if (!ret) {
+				fprintf(stderr,"Error, PTT write failed for serial device %s failed! Reason %d (%s)\n",p_s_global->ptttxdevice, errno, strerror(errno));
+				exit(-1);
+			}; // end if
+		}; // end for
 	} else {
 		usleep(100000);
 		// sleep for 100 ms

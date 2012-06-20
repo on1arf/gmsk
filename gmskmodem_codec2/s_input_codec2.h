@@ -40,6 +40,8 @@ int running, endoffile;
 unsigned char inbuffer[7]; // 40 ms @ 1.4 bps = 56 bits = 7 octets
 unsigned char outbuffer[24]; // 40 ms @ 4.8 bps = 192 bits = 24 octets
 char retmsg[ISALRETMSGSIZE]; // return message from SAL function
+int framecount=0;
+int startsent=0;
 
 // check for correct format
 if (p_g_global->format != 20) {
@@ -75,23 +77,16 @@ while (running) {
 	// read from input until end of file
 	endoffile=0;
 
-	// file has successfully opened.
+	// input has successfully opened.
 
-	// - send sync pattern 128 bit "01010" (twice as what the specifications demand)
-	// - send frame syncronisation pattern "0000 0101 0110 0111"
-
-	// everything is bit-inverted
-
-	bufferfill_bits(codec2_startsync_pattern, 1, sizeof(codec2_startsync_pattern)*8, p_s_global);
-
-	// send version (0x11) 3 times, NON inverted
-	unsigned char version=0x11;
-	bufferfill_bits(&version, 0, 8, p_s_global);
-	bufferfill_bits(&version, 0, 8, p_s_global);
-	bufferfill_bits(&version, 0, 8, p_s_global);
+	// mark "start sent" as 0
+	// actually sending the header has been moved down after we have received the first valid data from input
+	startsent=0;
 
 
 	while (!(endoffile)) {
+		int loop;
+		unsigned char *c1, *c2;
 		// note, we expect everything to be read in one go
 		retval=input_sal(ISAL_CMD_READ,inbuffer,7,&retval2,retmsg);
 
@@ -101,6 +96,28 @@ while (running) {
 			break;
 		}; // end if
 
+
+
+		// before sending, check if we already send a "sync pattern"
+
+		if (! startsent) {
+		
+			// - send sync pattern 128 bit "01010" (twice as what the specifications demand)
+			// - send frame syncronisation pattern "0000 0101 0110 0111"
+
+			// everything is bit-inverted
+
+			bufferfill_bits(codec2_startsync_pattern, 1, sizeof(codec2_startsync_pattern)*8, p_s_global);
+
+			// send version (0x11) 3 times, NON inverted
+			unsigned char version=0x11;
+			bufferfill_bits(&version, 0, 8, p_s_global);
+			bufferfill_bits(&version, 0, 8, p_s_global);
+			bufferfill_bits(&version, 0, 8, p_s_global);
+
+			// set start sent flag
+			startsent=1;
+		}; // end start sent?
 
 		if (retval == ISAL_RET_READ_EOF) {
 			// set "eof" marker but continue;
@@ -120,10 +137,39 @@ while (running) {
 			memset(&inbuffer[retval2],0x00,(7-retval2));
 		}; // end if
 
-		// success, copy codec2 frame 3 times
+		// success, copy codec2 
 		memcpy(&outbuffer[3],inbuffer,7);
-		memcpy(&outbuffer[10],inbuffer,7);
-		memcpy(&outbuffer[17],inbuffer,7);
+
+		// copy with interleaving
+		for (loop=0; loop<=6; loop++) {
+			outbuffer[interl2[loop]]=inbuffer[loop];
+		}; // end for
+
+		// copy with interleaving
+		for (loop=0; loop<=6; loop++) {
+			outbuffer[interl3[loop]]=inbuffer[loop];
+		}; // end for
+
+
+
+		// apply scrambling to make stream more random
+
+		// we have up to 25 known exor-patterns
+		if (framecount >= 25) {
+			framecount = 0;
+		}; // end if
+
+		c1=&scramble_exor[framecount][0];
+		// scrambling chars 3 up to 24 (starting at 0)
+		c2=&outbuffer[3];
+
+		// scramble 21 chars
+		for (loop=0; loop < 21; loop++) {
+			*c2 ^= *c1;
+			c2++; c1++;
+		}; // end for
+
+		framecount++; // no need to do range-checking, is done above
 
 
 		// if end-of-file, change marker
@@ -131,6 +177,10 @@ while (running) {
 			outbuffer[0]=0x7e; outbuffer[1]=0x80; outbuffer[2]=0xc5;
 		}; // end if
 
+
+
+		// init counter "frame line"
+		framecount=0;
 		// write 192 bits (= 24 octets), inverted
 		bufferfill_bits(outbuffer, 0, 192,p_s_global);
 
