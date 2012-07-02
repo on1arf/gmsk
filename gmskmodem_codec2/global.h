@@ -50,8 +50,8 @@
 
 #define AUDIOMINBUFFER 4800
 
-#define DEFAULT_SILENCEBEGIN 2 // 2 seconds silence at beginning
-#define DEFAULT_SILENCEEND 1 // 1 seconds silence at beginning
+#define DEFAULT_SILENCEBEGIN 3 // 0.3 seconds silence at beginning
+#define DEFAULT_SILENCEEND 10 // 1 second silence at beginning
 
 #define ALSACAPTURENONBLOCK 1 // 0=blocked alsa capture, 1 = unblocked alsa read
 #define ALSAPLAYBACKNONBLOCK 0 // 0=blocked alsa playback, 1 = unblocked alsa read
@@ -68,8 +68,6 @@ typedef struct {
 	int pntr_capture, pntr_process;
 	FILE * filein;
 	char * fnamein;
-	snd_pcm_t *handle;
-	snd_pcm_uframes_t frames;
 	char * fnameout;
 	int outtostdout;
 	char * udpout_host;
@@ -89,6 +87,8 @@ typedef struct {
 	#ifdef _USEALSA
 		int fileorcapture; // 0 = capture, 1 = file
 		char * capturedevice;
+		snd_pcm_t *handle;
+		snd_pcm_uframes_t frames;
 	#endif
 } r_globaldatastr;
 

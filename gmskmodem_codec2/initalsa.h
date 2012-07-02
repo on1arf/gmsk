@@ -40,7 +40,7 @@ if (ALSAPLAYBACKNONBLOCK) {
 	ret = snd_pcm_open(&s_global.alsahandle, s_global.alsaname, SND_PCM_STREAM_PLAYBACK, 0);
 }; // end else - if
 if (ret < 0) {
-	snprintf(retmsg,INITALSARETMSGSIZE, "unable to open pcm device: %s\n", snd_strerror(ret));
+	snprintf(retmsg,INITALSARETMSGSIZE, "ALSA-PLAY: unable to open pcm device: %s\n", snd_strerror(ret));
 	return(-1);
 }
 
@@ -48,28 +48,41 @@ if (ret < 0) {
 snd_pcm_hw_params_alloca(&params);
 
 /* Fill it in with default values. */
-snd_pcm_hw_params_any(s_global.alsahandle, params);
+ret=snd_pcm_hw_params_any(s_global.alsahandle, params);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: Error in setting default values: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
+
 
 /* Set the desired hardware parameters. */
 
 /* Interleaved mode */
-snd_pcm_hw_params_set_access(s_global.alsahandle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+ret=snd_pcm_hw_params_set_access(s_global.alsahandle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set access to interleaved: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
 
 /* Signed 16-bit little-endian format */
-snd_pcm_hw_params_set_format(s_global.alsahandle, params, SND_PCM_FORMAT_S16_LE);
+ret=snd_pcm_hw_params_set_format(s_global.alsahandle, params, SND_PCM_FORMAT_S16_LE);
+printf("ret format = %d \n",ret);
 
 
 /* number of channels */
-snd_pcm_hw_params_set_channels(s_global.alsahandle, params, 2);
+ret=snd_pcm_hw_params_set_channels(s_global.alsahandle, params, 2);
+printf("ret channels = %d \n",ret);
 
 
 /* 48 Khz sampling rate */
 val=RATE;
-snd_pcm_hw_params_set_rate_near(s_global.alsahandle, params, &val, &dir);
+ret=snd_pcm_hw_params_set_rate_near(s_global.alsahandle, params, &val, &dir);
+printf("ret rate = %d \n",ret);
 
 /* Try to set the period size to 960 frames (20 ms at 48Khz sampling rate). */
 frames = PERIOD;
-snd_pcm_hw_params_set_period_size_near(s_global.alsahandle, params, &frames, &dir);
+ret=snd_pcm_hw_params_set_period_size_near(s_global.alsahandle, params, &frames, &dir);
+printf("ret period set = %d \n",ret);
 
 // set_period_size_near TRIES to set the period size to a certain
 // value. However, there is no garantee that the audio-driver will accept
@@ -77,18 +90,19 @@ snd_pcm_hw_params_set_period_size_near(s_global.alsahandle, params, &frames, &di
 
 // get actual periode size from driver for capture and playback
 // capture
-snd_pcm_hw_params_get_period_size(params, &frames, &dir);
+ret=snd_pcm_hw_params_get_period_size(params, &frames, &dir);
+printf("ret period get = %d \n",ret);
 s_global.alsaframes = frames;
 
 if (frames != PERIOD) {
-	snprintf(retmsg,INITALSARETMSGSIZE,"periode could not be set: wanted %d, got %d \n",PERIOD,(int) frames);
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: periode could not be set: wanted %d, got %d \n",PERIOD,(int) frames);
 	warning=1;
 }; // end if
 
 /* Write the parameters to the driver */
 ret = snd_pcm_hw_params(s_global.alsahandle, params);
 if (ret < 0) {
-	snprintf(retmsg,INITALSARETMSGSIZE,"unable to set hw parameters: %s\n", snd_strerror(ret));
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set hw parameters: %s\n", snd_strerror(ret));
 	return(-1);
 }
 
@@ -114,6 +128,7 @@ snd_pcm_uframes_t frames;
 unsigned int val;
 int dir;
 int warning=0;
+int numchannel=0;
 
 /* Open PCM device for recording (capture). */
 if (ALSACAPTURENONBLOCK) {
@@ -123,7 +138,7 @@ if (ALSACAPTURENONBLOCK) {
 }; // end else - if
 
 if (ret < 0) {
-	snprintf(retmsg,INITALSARETMSGSIZE, "unable to open pcm device: %s\n", snd_strerror(ret));
+	snprintf(retmsg,INITALSARETMSGSIZE, "ALSA-CAPTURE: unable to open pcm device: %s\n", snd_strerror(ret));
 	return(-1);
 }
 
@@ -131,23 +146,63 @@ if (ret < 0) {
 snd_pcm_hw_params_alloca(&params);
 
 /* Fill it in with default values. */
-snd_pcm_hw_params_any(r_global.handle, params);
+ret=snd_pcm_hw_params_any(r_global.handle, params);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: Error in setting default values: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
+
 
 /* Set the desired hardware parameters. */
 
 /* Interleaved mode */
-snd_pcm_hw_params_set_access(r_global.handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+ret=snd_pcm_hw_params_set_access(r_global.handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: unable to set access to interleaved: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
+
+
 
 /* Signed 16-bit little-endian format */
-snd_pcm_hw_params_set_format(r_global.handle, params, SND_PCM_FORMAT_S16_LE);
+ret=snd_pcm_hw_params_set_format(r_global.handle, params, SND_PCM_FORMAT_S16_LE);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: unable to set format to SIGNED 16 bit: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
 
 
 /* number of channels */
 if (r_global.stereo) {
-	snd_pcm_hw_params_set_channels(r_global.handle, params, 2);
+	numchannel=2;
 } else {
-	snd_pcm_hw_params_set_channels(r_global.handle, params, 1);
-}; // end else - if
+	numchannel=1;
+};
+
+ret=snd_pcm_hw_params_set_channels(r_global.handle, params, numchannel);
+
+if (ret < 0) {
+	if (r_global.stereo) {
+		snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: unable to set number of channels to %d: %s\n", numchannel,snd_strerror(ret));
+		return(-1);
+	} else {
+	// mono fails, try stereo
+	ret=snd_pcm_hw_params_set_channels(r_global.handle, params, 2);
+
+	if (ret < 0) {
+		snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: setting number of channels fail; both mono and stereo have been tried!\n");
+		return(-1);
+
+	} else {
+		snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: mono capture fails, switched to stereo. Audio is expected on left channel.\n");
+		warning=1;
+		r_global.stereo=1;
+	}; // end if
+
+	
+
+	}; // end else - if
+}; // end if
 
 
 /* 48 Khz sampling rate */
@@ -168,14 +223,14 @@ snd_pcm_hw_params_get_period_size(params, &frames, &dir);
 r_global.frames = frames;
 
 if (frames != PERIOD) {
-	snprintf(retmsg,INITALSARETMSGSIZE,"periode could not be set: wanted %d, got %d \n",PERIOD,(int) r_global.frames);
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: periode could not be set: wanted %d, got %d \n",PERIOD,(int) r_global.frames);
 	warning=1;
 }; // end if
 
 /* Write the parameters to the driver */
 ret = snd_pcm_hw_params(r_global.handle, params);
 if (ret < 0) {
-	snprintf(retmsg,INITALSARETMSGSIZE,"unable to set hw parameters: %s\n", snd_strerror(ret));
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-CAPTURE: unable to set hw parameters: %s\n", snd_strerror(ret));
 	return(-1);
 }
 

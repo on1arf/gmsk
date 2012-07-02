@@ -59,8 +59,11 @@
 // needed for usleep
 #include <unistd.h>
 
-// ALSA sound
-#include <alsa/asoundlib.h>
+
+#ifdef _USEALSA
+	// ALSA sound
+	#include <alsa/asoundlib.h>
+#endif
 
 // for memset
 #include <strings.h>

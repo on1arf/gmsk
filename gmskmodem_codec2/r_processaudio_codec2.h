@@ -62,7 +62,6 @@ unsigned char codec2inframe[24]; // 40 ms @ 4800 bps = 192 bits = 24 octets
 
 unsigned char codec2versionid[3]; // 3 octets after header containing versionid (3 times)
 
-int loop;
 int retval, retval2=0;
 char retmsg[ISALRETMSGSIZE];
 int outputopen=0;
@@ -75,6 +74,11 @@ int framecount=0;
 int missedsync;
 int syncfound=0;
 
+// auto audioinvert detection
+int inaudioinvert=0;
+int syncpattern;
+int syncpattern_inverted;
+
 
 char marker=0; // 'S' (sync) , 'M' (missed) of 'E' (end) put at end of line 
 
@@ -82,6 +86,9 @@ int16_t *samplepointer;
 int channel;
 int buffermask;
 
+// tempory data
+int totalerror;
+int loop;
 
 // vars to calculate "maximum audio level" for a valid stream (i.e. no noise)
 int maxaudiolevelvalid=0;
@@ -182,7 +189,8 @@ if (p_r_global->stereo) {
 // init var
 countnoiseframe=0;
 hadtowait=0;
-
+syncpattern=p_r_global->syncpattern;
+syncpattern_inverted= syncpattern ^ 0xffffffff;
 
 // init thisfileend. For ALSA capturing, there is no file ending; so we
 // just thread this as a endless file
@@ -375,7 +383,24 @@ while (!(thisfileend)) {
 
 				// we accept up to "BITERROR START SYN" penality points for errors
 				// (note: syncmask is initialised above, based on syncsize)
-				bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize, p_r_global->syncpattern,BITERRORSSTARTSYN);
+
+				// syncpattern is initialised above
+				bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize, syncpattern,BITERRORSSTARTSYN);
+
+				if (bitmatch) {
+					inaudioinvert=0;
+				} else {
+
+					// try again with inverted bit pattern
+					bitmatch=countdiff16_fromlsb(last2octets,syncmask,p_r_global->syncsize, syncpattern_inverted, BITERRORSSTARTSYN);
+
+					if (bitmatch) {
+						inaudioinvert=1;
+						if ((p_g_global->verboselevel >= 1) || (p_r_global->dumpstream >= 1)) {
+							fprintf(stderr,"WARNING: audio invertion detected!\n");
+						}; // end if
+					}; // end if
+				}; // end if
 
 
 				if (bitmatch) {
@@ -412,9 +437,9 @@ while (!(thisfileend)) {
 
 					
 					#ifdef _USEALSA
-						if (!p_r_global->fileorcapture) {
+					if (DISABLE_AUDIOLEVELCHECK != 1) {
 						// test only makes sence for capture.
-						// it will be possible to overwrite this with an special option in a later release)
+						if (!p_r_global->fileorcapture) {
 							if (averagevalid) {
 								maxlevel = (averagetotal >> 8) * 13; // >>8=/256: divide by 16 (for 16 samples) and
 																			// then a 2nd time for get 13/16 of average total
@@ -425,25 +450,18 @@ while (!(thisfileend)) {
 									}; // end if
 								} else {
 									if (p_g_global->verboselevel >= 1) {
-										if (DISABLE_AUDIOLEVELCHECK != 1) {
 											fprintf(stderr,"START STREAM CANCELED - noiselevel %04X to high (max %04X)\n",thisaudioaverage, maxlevel);
 											continue;
-										} else {
-											fprintf(stderr,"START STREAM WARNING - noiselevel %04X to high (max %04X). NOT STOPPED\n",thisaudioaverage, maxlevel);
-										}; // end else - if
 									}; // end if
 								}; // end if
 							} else {
 								if (p_g_global->verboselevel >= 1) {
-									if (DISABLE_AUDIOLEVELCHECK != 1) {
 										fprintf(stderr,"START STREAM CANCELED - not yet enough data for noiselevel test\n");
 										continue;
-									} else {
-										fprintf(stderr,"START STREAM WARNING - not yet enough data for noiselevel test. NOT STOPPED.\n");
-									}; // end else - if
 								}; // end if
 							}; // end if
 						}; // end if (capture)
+					}; // DISABLE_AUDIOLEVELCHECK
 					#endif
 
 
@@ -502,14 +520,18 @@ while (!(thisfileend)) {
 				continue;
 			}; // end if
 
+			// invert value if audio is inverted
+			if (inaudioinvert) {
+				codec2versionid[0] ^= 0xff; codec2versionid[1] ^= 0xff; codec2versionid[2] ^= 0xff;
+			}; // end if
 
 			// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
-			fec13decode(codec2versionid[0],codec2versionid[1],codec2versionid[2],&thisversionid);
+			totalerror=fec13decode(codec2versionid[0],codec2versionid[1],codec2versionid[2],&thisversionid);
 
 
 			// print individual version id fields 
-			if (p_g_global->verboselevel >= 2) {
-				fprintf(stderr,"codec2 versionid fields: %X %X %X\n",codec2versionid[0],codec2versionid[1],codec2versionid[2]);
+			if ((totalerror) && (p_g_global->verboselevel >= 2)) {
+				fprintf(stderr,"WARNING: error detected in codec2 versionid fields: %X %X %X\n",codec2versionid[0],codec2versionid[1],codec2versionid[2]);
 			}; // end if
 
 			// print version id
@@ -617,17 +639,27 @@ while (!(thisfileend)) {
 				if (codec2_bitcount < 32) {
 					// bitslip tests
 
+					uint32_t framesync, endsync; 
+
+					if (inaudioinvert == 0) {
+						framesync=0x5c08e700;
+						endsync=0xc5807e00;
+					} else {
+						// only left 24 bits are used
+						framesync=0xa3f71800;
+						endsync=0x3a7f8100;
+					}; // end else - if
 
 					// only do test if sync not yet found and no resync yet done
 					if (!syncfound) {
 						if (codec2_bitcount == 24) {
 							// check sync pattern (first 24 bits), allow up to 3 biterrors
-							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 3)) {
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, framesync, 3)) {
 								marker='S';
 								missedsync=0;
 								endfound=0;
 								syncfound=1; // no further checks needed;
-							} else if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 3)) {
+							} else if (countdiff32_frommsb(last4octets, 0xffffff00, 24, endsync, 3)) {
 								marker='E';
 								endfound=1;
 								syncfound=1; // no further checks needed;
@@ -638,13 +670,13 @@ while (!(thisfileend)) {
 							// check sync pattern (first 24 bits), allow up to 1 biterror
 							// if found, correct "bitcount" value
 
-							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 1)) {
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, framesync, 1)) {
 								marker='T';
 								missedsync=0;
 								endfound=0;
 								syncfound=1; // no further checks needed
 								codec2_bitcount=24; // correct bit position
-							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 1)) {
+							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, endsync, 1)) {
 								marker='F';
 								endfound=1;
 								syncfound=1; // no further checks needed
@@ -655,13 +687,13 @@ while (!(thisfileend)) {
 							// check sync pattern (first 24 bits), allow no biterror
 							// if found, correct "bitcount" value
 
-							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0x5c08e700, 0)) {
+							if (countdiff32_frommsb(last4octets, 0xffffff00, 24, framesync, 0)) {
 								marker='U';
 								missedsync=0;
 								endfound=0;
 								syncfound=1; // no further checks needed
 								codec2_bitcount=24; // correct bit position
-							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, 0xc5807e00, 0)) {
+							} else  if (countdiff32_frommsb(last4octets, 0xffffff00, 24, endsync, 0)) {
 								marker='G';
 								endfound=1;
 								syncfound=1; // no further checks needed
@@ -736,7 +768,6 @@ while (!(thisfileend)) {
 
 			{
 				unsigned char *c1, *c2;
-				int loop;
 
 				c1=&scramble_exor[framecount][0];
 				// descramblink chars 3 up to 24 (starting at 0)
@@ -757,14 +788,14 @@ while (!(thisfileend)) {
 			// 2: apply FEC, including interleaving
 			{
 				unsigned char *p1, *d;
-				int totalerror=0;
 
-//fprintf(stderr,"X %02X %02X %02X \n",codec2inframe[0],codec2inframe[1],codec2inframe[2]);
+				totalerror=0;
+
 				p1=&codec2inframe[3];
+				// destination is codec2frame. Point to beginning of struct, then go up one position per loop
 				d=codec2frame;
 
 				for (loop=0; loop < 7; loop++) {
-//fprintf(stderr,"%d %02X %02X %02X \n",loop,*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]]);
 					totalerror += fec13decode(*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]],d);
 					p1++; d++;
 				}; // end for
@@ -774,6 +805,13 @@ while (!(thisfileend)) {
 				}; // end if
 			}; // end for
 
+
+			// frame received, now invert if needed
+			if (inaudioinvert) {
+				for (loop=0; loop<7; loop++) {
+					codec2frame[loop] ^= 0xff;
+				}; // end for
+			}; // end if
 
 
 			// 3 possible senario:
@@ -859,6 +897,7 @@ while (!(thisfileend)) {
 			// reinit vars
 			last2octets=0;
 			syncreceived=0; 
+			inaudioinvert=0;
 			state=0; // new state is 0, "waiting for sync"
 
 

@@ -121,7 +121,7 @@ if (state == 0)  {
 	// if no begin-silence: go directly to state 2
 	if (s_global.silencebegin) {
 		state=1;
-		silencesize=s_global.silencebegin*50; // function is started 50 times / second
+		silencesize=s_global.silencebegin*5; // function is started 50 times / second (silence counter is in tenth of second)
 		silencecounter=0;
 
 		// lock PTT lockfile
@@ -169,7 +169,7 @@ if (state == 0)  {
 		if (s_global.silenceend) {
 			// silence to be added at the end
 			state=3;
-			silencesize=s_global.silenceend*50; // function is started 50 times / second
+			silencesize=s_global.silenceend*5; // function is started 50 times / second (silence value is tenth of second)
 			silencecounter=0;
 
 			g_global.sending=1;
