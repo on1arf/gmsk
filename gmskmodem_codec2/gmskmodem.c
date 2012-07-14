@@ -43,6 +43,12 @@
 /* Use the newer ALSA API */
 #define ALSA_PCM_NEW_HW_PARAMS_API
 
+// set _USEFLOAT to 0 if if does not exist
+#ifndef _USEFLOAT
+	#define _USEFLOAT 0
+#endif
+
+
 // needed for S_IRUSR, S_IWUSR, S_IRGRP and S_IWGRP
 #include <sys/stat.h>
 

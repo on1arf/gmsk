@@ -88,6 +88,7 @@ int buffermask;
 
 // tempory data
 int totalerror;
+int8_t error_8bit;
 int loop;
 
 // vars to calculate "maximum audio level" for a valid stream (i.e. no noise)
@@ -526,11 +527,11 @@ while (!(thisfileend)) {
 			}; // end if
 
 			// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
-			totalerror=fec13decode(codec2versionid[0],codec2versionid[1],codec2versionid[2],&thisversionid);
+			error_8bit=fec13decode_8bit(codec2versionid[0],codec2versionid[1],codec2versionid[2],&thisversionid);
 
 
 			// print individual version id fields 
-			if ((totalerror) && (p_g_global->verboselevel >= 2)) {
+			if ((error_8bit) && (p_g_global->verboselevel >= 2)) {
 				fprintf(stderr,"WARNING: error detected in codec2 versionid fields: %X %X %X\n",codec2versionid[0],codec2versionid[1],codec2versionid[2]);
 			}; // end if
 
@@ -760,10 +761,8 @@ while (!(thisfileend)) {
 
 			// 1: apply scrambling
 
-			// we have up to 25 lines of know exor-patterns
-			if (framecount >= 25) {
-				framecount=0;
-			}; // end if
+			// we have up to 8 lines of known exor-patterns
+			framecount &= 0x7;
 
 
 			{
@@ -795,15 +794,23 @@ while (!(thisfileend)) {
 				// destination is codec2frame. Point to beginning of struct, then go up one position per loop
 				d=codec2frame;
 
-				for (loop=0; loop < 7; loop++) {
-					totalerror += fec13decode(*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]],d);
-					p1++; d++;
-				}; // end for
-
 				if (p_g_global->verboselevel >= 3) {
+					for (loop=0; loop < 7; loop++) {
+						error_8bit = fec13decode_8bit(*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]],d);
+						if (error_8bit) {
+							totalerror += count1s_8bit(error_8bit);
+						}; // end if
+						p1++; d++;
+					}; // end for
+
 					printf("Number of bit errors: %d\n\n",totalerror);
+				} else {
+					for (loop=0; loop < 7; loop++) {
+						fec13decode_8bit(*p1,codec2inframe[interl2[loop]],codec2inframe[interl3[loop]],d);
+						p1++; d++;
+					}; // end for
 				}; // end if
-			}; // end for
+			}; // FEC + interleaving
 
 
 			// frame received, now invert if needed

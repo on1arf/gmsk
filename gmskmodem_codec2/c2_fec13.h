@@ -56,3 +56,91 @@ for (loop=0; loop <= 7; loop++) {
 return(errors);
 
 }; // end if
+
+//////////////////// NEW VERSION .. HOPEFULLY A BIT FASTER
+
+// BASIC IDEA
+// INPUT: B1, B2, B3
+// TMP DATA: D1, D2
+
+// 1/ first: assume B1 is correct
+// 2/ compare B1 with B2 (exor) -> D1: 0: bits are equal, D2: bits are different
+// 3/ compare B1 with B3 (exor) -> D2: 0: bits are equal, D2: bits are different
+// 4/ if D1 and D2 are both 1 (AND), B1 is NOT correct -> invert it (exor)
+
+// By doing it with bit logic; this can be done 8 bits or 32 bits at a time
+
+uint8_t fec13decode_8bit(uint8_t in1, uint8_t in2, uint8_t in3, uint8_t * ret) {
+uint8_t d1, d2;
+uint8_t errors;
+uint8_t t;
+
+t=in1;
+
+d1=t ^ in2;
+
+d2=t ^ in3;
+
+errors= d1 & d2;
+*ret = t ^ errors;
+return(errors);
+}; // end FUNCTION fec13decode_8bit
+
+
+uint32_t fec13decode_32bit(uint32_t in1, uint32_t in2, uint32_t in3, uint32_t * ret) {
+uint32_t d1, d2;
+uint32_t errors;
+uint32_t t;
+
+
+t=in1;
+
+d1=t ^ in2;
+d2=t ^ in3;
+
+errors= d1 & d2;
+*ret = t ^errors;
+
+return(errors);
+}; // end FUNCTION fec13decode_32bit
+
+int count1s_8bit(uint8_t in) {
+if (in) {
+	int loop;
+
+	int c=0;
+	for (loop=0; loop<8; loop++) {
+		if (in & 0x01) {
+			c++;
+		}; // end if
+		in>>=1;
+	}; // end for
+	return(c);
+	
+} else {
+	return(0);
+}; // end else - if
+}; // end  function count1s_8bit
+
+
+
+int count1s_32bit(uint32_t in) {
+if (in) {
+	int loop;
+
+	int c=0;
+	for (loop=0; loop<32; loop++) {
+		if (in & 0x01) {
+			c++;
+		}; // end if
+		in>>=1;
+	}; // end for
+	return(c);
+	
+} else {
+	return(0);
+}; // end else - if
+}; // end  function count1s_8bit
+
+
+

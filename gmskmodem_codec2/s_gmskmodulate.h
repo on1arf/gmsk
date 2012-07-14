@@ -56,7 +56,9 @@ void modulate1bit (int bit, int16_t * audioret) {
 // local vars
 int loop;
 
+#if _USEFLOAT == 0
 int64_t filterret;
+#endif
 int16_t ret16;
 
 int16_t *p=NULL;
@@ -78,8 +80,12 @@ p=audioret;
 if (bit) {
 // bit = 1 -> send -16384 to firfilter
 	for (loop=0; loop<10; loop++) {
+#if _USEFLOAT == 1
+		ret16=(int)(firfilter_modulate(-16384));
+#else
 		filterret=firfilter_modulate(-16384);
 		ret16=process_return(filterret);
+#endif
 
 		// store data
 		*p=ret16;
@@ -88,8 +94,12 @@ if (bit) {
 } else {
 // bit = 0 -> send +16384 to firfilter
 	for (loop=0; loop<10; loop++) {
+#if _USEFLOAT == 1
+		ret16=(int)(firfilter_modulate(16384));
+#else
 		filterret=firfilter_modulate(16384);
 		ret16=process_return(filterret);
+#endif
 
 		// store data
 		*p=ret16;

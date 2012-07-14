@@ -140,6 +140,10 @@ typedef struct {
 		int ptt_invert;
 	#endif
 
+	// id file and frequency
+	char * idfile;
+	int idfreq;
+
 	// flags from CLI options to application
 	int sync;
 	int zap;
@@ -193,6 +197,7 @@ c_globaldatastr c_global;
 
 
 // END GLOBAL STRUCTURES
+
 
 
 // FIXED D-STAR PATTERNS

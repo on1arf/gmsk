@@ -44,6 +44,56 @@
 // global data
 
 
+#if _USEFLOAT == 1
+
+float coeffs_table_modulate [] = {
+        6.455906007234699e-014F, 1.037067381285011e-012F, 1.444835156335346e-011F,
+        1.745786683011439e-010F, 1.829471305298363e-009F, 1.662729407135958e-008F,
+        1.310626978701910e-007F, 8.959797186410516e-007F, 5.312253663302771e-006F,
+        2.731624380156465e-005F, 1.218217140199093e-004F, 4.711833994209542e-004F,
+        1.580581180127418e-003F, 4.598383433830095e-003F, 1.160259430889949e-002F,
+        2.539022692626253e-002F, 4.818807833062393e-002F, 7.931844341164322e-002F,
+        1.132322945270602e-001F, 1.401935338024111e-001F, 1.505383695578516e-001F,
+        1.401935338024111e-001F, 1.132322945270601e-001F, 7.931844341164328e-002F,
+        4.818807833062393e-002F, 2.539022692626253e-002F, 1.160259430889949e-002F,
+        4.598383433830090e-003F, 1.580581180127420e-003F, 4.711833994209542e-004F,
+        1.218217140199093e-004F, 2.731624380156465e-005F, 5.312253663302753e-006F,
+        8.959797186410563e-007F, 1.310626978701910e-007F, 1.662729407135958e-008F,
+        1.829471305298363e-009F, 1.745786683011426e-010F, 1.444835156335356e-011F,
+        1.037067381285011e-012F, 6.455906007234699e-014F};
+
+
+float coeffs_table_demodulate [] = {
+        -0.000153959924563F,  0.000000000000000F,  0.000167227768379F,  0.000341615513437F,
+         0.000513334449696F,  0.000667493753523F,  0.000783901543032F,  0.000838293462576F,
+         0.000805143268199F,  0.000661865814384F,  0.000393913058926F, -0.000000000000000F,
+        -0.000503471198655F, -0.001079755887508F, -0.001671728086040F, -0.002205032425392F,
+        -0.002594597675000F, -0.002754194565297F, -0.002608210441859F, -0.002104352817854F,
+        -0.001225654870420F,  0.000000000000000F,  0.001494548041184F,  0.003130012785731F,
+         0.004735238379172F,  0.006109242742194F,  0.007040527007323F,  0.007330850462455F,
+         0.006821247169795F,  0.005417521811131F,  0.003112202160626F, -0.000000000000000F,
+        -0.003715739376345F, -0.007727358782391F, -0.011638713107503F, -0.014992029537478F,
+        -0.017304097563429F, -0.018108937286588F, -0.017003180218569F, -0.013689829477969F,
+        -0.008015928769710F,  0.000000000000000F,  0.010154104792614F,  0.022059114281395F,
+         0.035162729807337F,  0.048781621388364F,  0.062148583345584F,  0.074469032280094F,
+         0.084982001723750F,  0.093020219991183F,  0.098063819576269F,  0.099782731268437F,
+         0.098063819576269F,  0.093020219991183F,  0.084982001723750F,  0.074469032280094F,
+         0.062148583345584F,  0.048781621388364F,  0.035162729807337F,  0.022059114281395F,
+         0.010154104792614F,  0.000000000000000F, -0.008015928769710F, -0.013689829477969F,
+        -0.017003180218569F, -0.018108937286588F, -0.017304097563429F, -0.014992029537478F,
+        -0.011638713107503F, -0.007727358782391F, -0.003715739376345F, -0.000000000000000F,
+         0.003112202160626F,  0.005417521811131F,  0.006821247169795F,  0.007330850462455F,
+         0.007040527007323F,  0.006109242742194F,  0.004735238379172F,  0.003130012785731F,
+         0.001494548041184F,  0.000000000000000F, -0.001225654870420F, -0.002104352817854F,
+        -0.002608210441859F, -0.002754194565297F, -0.002594597675000F, -0.002205032425392F,
+        -0.001671728086040F, -0.001079755887508F, -0.000503471198655F, -0.000000000000000F,
+         0.000393913058926F,  0.000661865814384F,  0.000805143268199F,  0.000838293462576F,
+         0.000783901543032F,  0.000667493753523F,  0.000513334449696F,  0.000341615513437F,
+         0.000167227768379F,  0.000000000000000F, -0.000153959924563F
+};
+
+#else
+
 // PART1 : DEMODULATION DATA
 int32_t coeffs_table_demodulate [] = {
 -330625, 0, 359119, 733614, 1102377, 1433432, 
@@ -66,9 +116,6 @@ int32_t coeffs_table_demodulate [] = {
 -330625
 }; // end table
 
-const int coeffs_size_demodulate=103;
-const int buffersize_demodulate=2060; // coeffs_size_demodulate * 20;
-
 
 // PART 2: MODULATION data
 int32_t coeffs_table_modulate [] = {
@@ -88,6 +135,12 @@ int32_t coeffs_table_modulate [] = {
 0,0
 }; // end table
 
+#endif
+
+
+
+const int coeffs_size_demodulate=103;
+const int buffersize_demodulate=2060; // coeffs_size_demodulate * 20;
 
 const int coeffs_size_modulate=41;
 const int buffersize_modulate=820; // coeffs_size_modulate * 20;
@@ -107,25 +160,39 @@ const int buffersize_modulate=820; // coeffs_size_modulate * 20;
 
 ///////////////////////////////////////
 /// function firfilter for demodulation
+#if _USEFLOAT == 1
+float firfilter_demodulate(float val) {
+#else
 signed long long firfilter_demodulate(int16_t val) {
+#endif
 static int pointer;
 static int init=1;
 
-static int16_t *buffer;
 
 //int64_t retval;
+#if _USEFLOAT == 1
+static float *buffer;
+float retval;
+float *ptr1;
+float *ptr2;
+#else
+static int16_t *buffer;
 signed long long retval;
-
-int bufferloop;
-
 int16_t *ptr1;
 int32_t *ptr2;
+#endif
+
+int bufferloop;
 
 if (init) {
 	init=0;
 
 	// allocate memory for buffer
+#if _USEFLOAT == 1
+	buffer=malloc(buffersize_demodulate * sizeof(float));
+#else
 	buffer=malloc(buffersize_demodulate * sizeof(int16_t));
+#endif
 
 	if (!buffer) {
 		fprintf(stderr,"Error: could allocate memory for databuffer!\n");
@@ -134,7 +201,11 @@ if (init) {
 
 
 	// init buffer: all zero for first "coeffs_size_demodulate" elements.
+#if _USEFLOAT == 1
+	memset(buffer,0,coeffs_size_demodulate * sizeof(float));
+#else
 	memset(buffer,0,coeffs_size_demodulate * sizeof(int16_t));
+#endif
 
 	// init vars
 
@@ -154,14 +225,22 @@ ptr2=coeffs_table_demodulate;
 
 retval=0;
 for (bufferloop=0;bufferloop<coeffs_size_demodulate;bufferloop++) {
+#if _USEFLOAT == 1
+	retval += (*ptr1++) * (*ptr2++);
+#else
 	retval += ((long long) *ptr1++) * ((long long) *ptr2++);
+#endif
 }; // end for
 
 
 // If pointer has moved past of end of buffer, copy last "coeffs_size_demodulate"
 // elements to the beginning of the table and move pointer down
 if (pointer >= buffersize_demodulate) {
+#if _USEFLOAT == 1
+	memmove(buffer,&buffer[buffersize_demodulate-coeffs_size_demodulate],coeffs_size_demodulate*sizeof(float));
+#else
 	memmove(buffer,&buffer[buffersize_demodulate-coeffs_size_demodulate],coeffs_size_demodulate*sizeof(int16_t));
+#endif
 	pointer=coeffs_size_demodulate;
 }; // end if
 
@@ -172,25 +251,40 @@ return(retval);
 
 ///////////////////////////////////////
 /// function firfilter for modulation
+#if _USEFLOAT == 1
+float firfilter_modulate(float val) {
+#else
 signed long long firfilter_modulate(int16_t val) {
+#endif
+
 static int pointer;
 static int init=1;
 
-static int16_t *buffer;
 
-//int64_t retval;
+#if _USEFLOAT == 1
+static float *buffer;
+float retval;
+float *ptr1;
+float *ptr2;
+#else
+static int16_t *buffer;
 signed long long retval;
+int16_t *ptr1;
+int32_t *ptr2;
+#endif
 
 int bufferloop;
 
-int16_t *ptr1;
-int32_t *ptr2;
 
 if (init) {
 	init=0;
 
 	// allocate memory for buffer
+#if _USEFLOAT == 1
+	buffer=malloc(buffersize_modulate * sizeof(float));
+#else
 	buffer=malloc(buffersize_modulate * sizeof(int16_t));
+#endif
 
 	if (!buffer) {
 		fprintf(stderr,"Error: could allocate memory for databuffer!\n");
@@ -199,7 +293,11 @@ if (init) {
 
 
 	// init buffer: all zero for first "coeffs_size_demodulate" elements.
+#if _USEFLOAT == 1
+	memset(buffer,0,coeffs_size_modulate * sizeof(float));
+#else
 	memset(buffer,0,coeffs_size_modulate * sizeof(int16_t));
+#endif
 
 	// init vars
 
@@ -219,14 +317,22 @@ ptr2=coeffs_table_modulate;
 
 retval=0;
 for (bufferloop=0;bufferloop<coeffs_size_modulate;bufferloop++) {
+#if _USEFLOAT == 1
+	retval += (*ptr1++) * (*ptr2++);
+#else
 	retval += ((long long) *ptr1++) * ((long long) *ptr2++);
+#endif
 }; // end for
 
 
 // If pointer has moved past of end of buffer, copy last "coeffs_size_demodulate"
 // elements to the beginning of the table and move pointer down
 if (pointer >= buffersize_modulate) {
+#if _USEFLOAT == 1
+	memmove(buffer,&buffer[buffersize_modulate-coeffs_size_modulate],coeffs_size_modulate*sizeof(float));
+#else
 	memmove(buffer,&buffer[buffersize_modulate-coeffs_size_modulate],coeffs_size_modulate*sizeof(int16_t));
+#endif
 	pointer=coeffs_size_modulate;
 }; // end if
 
@@ -242,7 +348,11 @@ int demodulate (int16_t audioin) {
 static int init=1;
 static int last;
 static int m_pll;
+#if _USEFLOAT == 1
+float filterret;
+#else
 signed long long filterret;
+#endif
 
 int bit;
 
@@ -260,7 +370,11 @@ if (init) {
 
 // main part of function starts here
 
+#if _USEFLOAT == 1
+filterret=firfilter_demodulate((float)audioin);
+#else
 filterret=firfilter_demodulate(audioin);
+#endif
 
 // audio invert: (0:no), 1:receive, (2:transmit), 3=both
 if (g_global.audioinvert & 0x01) {

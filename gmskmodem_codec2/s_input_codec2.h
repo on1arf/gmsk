@@ -1,4 +1,4 @@
-/* INPUT AND PROCESS: RAW format */
+/* INPUT AND PROCESS: CODEC2 format */
 
 
 /*
@@ -42,6 +42,8 @@ unsigned char outbuffer[24]; // 40 ms @ 4.8 bps = 192 bits = 24 octets
 char retmsg[ISALRETMSGSIZE]; // return message from SAL function
 int framecount=0;
 int startsent=0;
+int idfilecount=0;
+int idinfile; // file
 
 // check for correct format
 if (p_g_global->format != 20) {
@@ -154,10 +156,8 @@ while (running) {
 
 		// apply scrambling to make stream more random
 
-		// we have up to 25 known exor-patterns
-		if (framecount >= 25) {
-			framecount = 0;
-		}; // end if
+		// we have up to 8 known exor-patterns
+		framecount &= 0x7;
 
 		c1=&scramble_exor[framecount][0];
 		// scrambling chars 3 up to 24 (starting at 0)
@@ -175,12 +175,13 @@ while (running) {
 		// if end-of-file, change marker
 		if (endoffile) {
 			outbuffer[0]=0x7e; outbuffer[1]=0x80; outbuffer[2]=0xc5;
+
+			// reinit counter "frame line"
+			framecount=0;
 		}; // end if
 
 
 
-		// init counter "frame line"
-		framecount=0;
 		// write 192 bits (= 24 octets), inverted
 		bufferfill_bits(outbuffer, 0, 192,p_s_global);
 
@@ -201,14 +202,60 @@ while (running) {
 		break;
 	}; // end if	
 
+	// play out signature audio-file
+	if (p_s_global->idfile) {
+		// wait for "bits" queue to end
+		bufferwaitdone_bits(p_s_global);
+
+		// only play out idfile every "idfreq" times
+		if (idfilecount == 0) {
+			int filesize=0;
+			ssize_t sizeread;
+
+			unsigned char filebuffer[160];
+
+
+			idinfile=open(p_s_global->idfile,O_RDONLY);
+
+			if (idinfile) {
+				filesize = 0;
+
+				// maximum 3 seconds (300 times 10 ms)
+				while (filesize < 300) {
+				// read 10 ms (8000 Khz, 16 bit size, mono) = 160 octets
+					sizeread=read(idinfile,filebuffer,160);
+
+					if (sizeread < 160) {
+					// stop if no audio anymore
+						break;
+					}; // end if
+
+					// write 80 samples, repeat every sample 6 times (8Khz -> 48 Khz samplerate)
+					bufferfill_audio((int16_t *)filebuffer,80,6,p_s_global);
+
+				}; // end while
+			}; // end if
+
+		}; // end if
+
+		idfilecount++;
+
+
+
+		if (idfilecount >= p_s_global->idfreq) {
+			idfilecount=0;
+		}; // end if
+
+	}; // signature audio file
+
 	// close was successfull,
-	// if we cannot re-open stop here
+	// if we cannot re-open stop here 
 	if (retval2 == ISAL_INPUT_REOPENNO) {
 		running=0;
 		break;
 	}; // end if
 
-}; // end while
+}; // end while running
 
 
 // wait for "bits" queue to end

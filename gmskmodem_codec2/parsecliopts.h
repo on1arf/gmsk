@@ -20,11 +20,11 @@
 int parsecliopts(int argc, char ** argv, char * retmsg) {
 
 #ifdef _USEALSA
-char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] [-lf PTTlockfile.lck] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender]\n";
-char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] [-lf PTTlockfile.lck] -format {d,r,s} [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format codec2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (1/10 seconds)(SENDER)\n -se: length of silence at end of transmission (1/10 seconds)(SENDER)\n\n -resync:  resyncronize: overwrite 21-frame syncronisation pattern in slow-speed data with standard D-STAR pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -lf: lockfile use to signal PTT switching\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input alsa-device is stereo(RECEIVER)\n -audioinvert: input audio inverted (needed for certain types of ALSA devices): 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -ria: INPUT ALSA DEVICE \n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -soa: OUTPUT alsa device\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
+char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] [-lf PTTlockfile.lck] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-id idfile idfrequency] [-noreceiver] [-nosender]\n";
+char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] [-lf PTTlockfile.lck] -format {d,r,s} [-recformat {d,r,s}] {-ria alsadevice | -rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-soa alsadevice | -sof senderoutputfile.raw} [-id idfile idfrequency] [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format codec2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (1/10 seconds)(SENDER)\n -se: length of silence at end of transmission (1/10 seconds)(SENDER)\n\n -resync:  resyncronize: overwrite 21-frame syncronisation pattern in slow-speed data with standard D-STAR pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -lf: lockfile use to signal PTT switching\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input alsa-device is stereo(RECEIVER)\n -audioinvert: input audio inverted (needed for certain types of ALSA devices): 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -ria: INPUT ALSA DEVICE \n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -soa: OUTPUT alsa device\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
 #else
-char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-noreceiver] [-nosender]\n";
-char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] -format {d,r,s} [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format CODEC2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (1/10 seconds)(SENDER)\n -se: length of silence at end of transmission (1/10 seconds)(SENDER)\n\n -resync:  resyncronize: overwrite D-STAR 21-frame syncronisation pattern in slow-speed data with standard pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input file is stereo(RECEIVER)\n -audioinvert: input audio inverted: 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
+char * usage="Usage: gmskmodem [-h] [-v] [-4 | -6] [-sb sec] [-se sec] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-resync] [-z] [-m] -format {d,r,s,c} [-dvsystem {d,c}] [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-id idfile idfrequency] [-noreceiver] [-nosender]\n";
+char * help="Usage: receiver [-h] [-v] [-4 | -6] [-rs hex] [-rss size] [-rawinvert] [-audioinvert {n,r,s,b}] [-d] [-dd] [-da] [-s] [-m] -format {d,r,s} [-recformat {d,r,s}] {-rif inputfilename} {-rof outputfilename | -rou udphost udpport} {-sif senderinputfilename | -sif - | -sit tcpport | -siu udpport} {-sof senderoutputfile.raw} [-id idfile idfreq] [-noreceiver] [-nosender] \n\n Options:\n -h: help (this text)\n -v: verbose\n \n -format: file/stdin-out format: d (D-STAR dvtool), s (D-STAR stream), c (codec2) or r (raw) (RECEIVER AND SENDER)\n -dvsystem: d (d-star), c (codec2)\n -recformat: overwrites global format-setting for receiver\n\n -rs: RAW-mode frame syncronisation pattern (default: 0x7650 for format D-STAR, 0x0567 for format CODEC2) (RECEIVER)\n -rss: RAW-mode frame syncronisation pattern size (default: 15 bits, as used by D-STAR)(RECEIVER)\n -rawinvert: RAW-mode bitsequence invert (bits read/written from left (bit7) to right (bit0)) (SENDER AND RECEIVER)\n -sb: length of silence at beginning of transmission (1/10 seconds)(SENDER)\n -se: length of silence at end of transmission (1/10 seconds)(SENDER)\n\n -resync:  resyncronize: overwrite D-STAR 21-frame syncronisation pattern in slow-speed data with standard pattern(SENDER)\n -z: Zap (delete) D-STAR slow-speed data information(SENDER)\n -m: add begin and end MARKERS to raw data output(RECEIVER)\n \n -d: dump stream data(RECEIVER)\n -dd: dump more stream data(RECEIVER)\n -da: dump average audio-level data(RECEIVER)\n \n -s: stereo: input file is stereo(RECEIVER)\n -audioinvert: input audio inverted: 'n' (no), 'r' (receive), 's' (sender), 'b' (both) (RECEIVER AND SENDER)\n \n RECEIVER INPUT AND OUTPUT:\n -rif: INPUT FILE \n -rof: output filename (use \"-\" for stdout)\n -rou: stream out received data over UDP (port + udp port needed)\n SENDER INPUT AND OUTPUT:\n -sif: input file (use \"-\" for stdin)\n -sit: input TCP port\n -siu: input UDP port\n -sof: OUTPUT file\n\n -4: UDP host hostname lookup ipv4 only(RECEIVER)\n -6: UDP host hostname lookup ipv6 only(RECEIVER) \n\n -noreceiver: disables receiver module\n -nosender: disables sender module\n";
 
 #endif
 // local vars
@@ -75,6 +75,8 @@ s_global.silenceend=DEFAULT_SILENCEEND;
 s_global.udpport=0;
 s_global.tcpport=0;
 s_global.disable=0;
+s_global.idfile=NULL;
+s_global.idfreq=0;
 
 
 // SENDER AND RECEIVER
@@ -144,6 +146,27 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 
 		} else {
 			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: -u needs two additional arguments: host and port\n");
+			return(-1);
+		}; // end if
+	} else if (strcmp(thisarg,"-id") == 0) {
+		// -id: idfile idfreq
+
+		// is there a next argument?
+		if (paramloop+2 < argc ) {
+			paramloop++;
+			
+			s_global.idfile=argv[paramloop];
+
+			paramloop++;
+			s_global.idfreq=atoi(argv[paramloop]);
+
+			if (s_global.idfreq < 1) {
+				snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: ID repeat frequency should be at least 1\n");
+				return(-1);
+			}; // end if
+
+		} else {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: -id needs two additional arguments: idfile and idfrequency\n");
 			return(-1);
 		}; // end if
 	} else if (strcmp(thisarg,"-rof") == 0) {
@@ -479,11 +502,11 @@ if (argc <= 2) {
 // set some implicit parameters
 
 // if no specific receiver format defined, global format parameter
-if (r_global.recformat == 0) {
+if (!r_global.recformat) {
 	r_global.recformat=g_global.format;
 }; // end if
 
-if (g_global.dvsystem == 0) {
+if (!g_global.dvsystem) {
 	// try to determine dvsystem based on format-type
 	// if format is "d-star" or "d-star stream", set dvsystem to d-star
 	// if format is "codec2", set dvsystem to codec2
@@ -494,6 +517,11 @@ if (g_global.dvsystem == 0) {
 	}; // end if
 }; // end if
 
+
+if ((!g_global.dvsystem) && (!g_global.format)) {
+	snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: No DV-system or format given\n%s\n",usage);
+	return(-1);
+}; // end if
 
 // synpatterns:
 if (g_global.dvsystem == 1) {
