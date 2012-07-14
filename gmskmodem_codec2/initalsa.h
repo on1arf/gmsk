@@ -66,23 +66,36 @@ if (ret < 0) {
 
 /* Signed 16-bit little-endian format */
 ret=snd_pcm_hw_params_set_format(s_global.alsahandle, params, SND_PCM_FORMAT_S16_LE);
-printf("ret format = %d \n",ret);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set format to 16 bit Little Endian: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
+
 
 
 /* number of channels */
 ret=snd_pcm_hw_params_set_channels(s_global.alsahandle, params, 2);
-printf("ret channels = %d \n",ret);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set channels 2: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
 
 
 /* 48 Khz sampling rate */
 val=RATE;
 ret=snd_pcm_hw_params_set_rate_near(s_global.alsahandle, params, &val, &dir);
-printf("ret rate = %d \n",ret);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set rate 48000: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
 
 /* Try to set the period size to 960 frames (20 ms at 48Khz sampling rate). */
 frames = PERIOD;
 ret=snd_pcm_hw_params_set_period_size_near(s_global.alsahandle, params, &frames, &dir);
-printf("ret period set = %d \n",ret);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to set period to %d: %s\n", PERIOD,snd_strerror(ret));
+	return(-1);
+}; // end if
 
 // set_period_size_near TRIES to set the period size to a certain
 // value. However, there is no garantee that the audio-driver will accept
@@ -91,7 +104,10 @@ printf("ret period set = %d \n",ret);
 // get actual periode size from driver for capture and playback
 // capture
 ret=snd_pcm_hw_params_get_period_size(params, &frames, &dir);
-printf("ret period get = %d \n",ret);
+if (ret < 0) {
+	snprintf(retmsg,INITALSARETMSGSIZE,"ALSA-PLAY: unable to get period: %s\n", snd_strerror(ret));
+	return(-1);
+}; // end if
 s_global.alsaframes = frames;
 
 if (frames != PERIOD) {
