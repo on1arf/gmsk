@@ -43,9 +43,15 @@
 /* Use the newer ALSA API */
 #define ALSA_PCM_NEW_HW_PARAMS_API
 
-// set _USEFLOAT to 0 if if does not exist
+// set _USEFLOAT to 0 if not set
 #ifndef _USEFLOAT
 	#define _USEFLOAT 0
+#endif
+
+// set _INTMATH to 64 if not set
+#ifndef _INTMATH
+	#define _INTMATH 64
+XXXXX
 #endif
 
 

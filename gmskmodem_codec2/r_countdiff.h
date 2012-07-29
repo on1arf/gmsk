@@ -89,7 +89,8 @@ int countdiff64_fromlsb(uint64_t data, uint64_t mask, int size, uint64_t target,
 
 int countdiff64_frommsb(uint64_t data, uint64_t mask, int size, uint64_t target, int maxdiff) {
 	int loop;
-	int bit, lastbit=0;
+	uint64_t bit;
+	int lastbit=0;
 	int penalty;
 
 	uint64_t diff;
@@ -117,7 +118,7 @@ int countdiff64_frommsb(uint64_t data, uint64_t mask, int size, uint64_t target,
 
 	for (loop=0;loop<size;loop++) {
 		// get leftmost bit
-		bit=diff & 0x8000000000000000;
+		bit=diff & 0x8000000000000000ULL;
 
 		// move everything to the right for the next loop
 		diff >>= 1;

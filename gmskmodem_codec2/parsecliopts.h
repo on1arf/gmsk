@@ -182,7 +182,10 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 		if (paramloop+1 < argc) {
 			paramloop++;
 			r_global.fnameout=argv[paramloop];
- 		}; // end if
+ 		} else {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: Missing argument.\n%s\n",usage);
+			return(-1);
+		}; // end if
 		
 		if (strcmp(r_global.fnameout,"-") == 0) {
 			r_global.outtostdout=1;

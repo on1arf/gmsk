@@ -92,51 +92,127 @@ float coeffs_table_demodulate [] = {
          0.000167227768379F,  0.000000000000000F, -0.000153959924563F
 };
 
+const int firstnonzero_modulate=0; // use complete table
+const int lastnonzero_modulate=40; // use complete table
+
 #else
+	#if _INTMATH == 64
+		// PART1 : DEMODULATION DATA: 32 bits used of 32 bits
+		int32_t coeffs_table_demodulate [] = {
+		-330625, 0, 359119, 733614, 1102377, 1433432, 
+		1683416, 1800222, 1729032, 1421346, 845922, 0, 
+		-1081195, -2318757, -3590008, -4735270, -5571855, -5914587, 
+		-5601089, -4519063, -2632073, 0, 3209518, 6721652, 
+		10168847, 13119499, 15119417, 15742881, 14648517, 11634040, 
+		6683403, 0, -7979489, -16594376, -24993945, -32195137, 
+		-37160267, -38888647, -36514051, -29398683, -17214075, 0, 
+		21805774, 47371588, 75511384, 104757736, 133463064, 159921024, 
+		182497456, 199759408, 210590448, 214281776, 210590448, 199759408, 
+		182497456, 159921024, 133463064, 104757736, 75511384, 47371588, 
+		21805774, 0, -17214075, -29398683, -36514051, -38888647, 
+		-37160267, -32195137, -24993945, -16594376, -7979489, 0, 
+		6683403, 11634040, 14648517, 15742881, 15119417, 13119499, 
+		10168847, 6721652, 3209518, 0, -2632073, -4519063, 
+		-5601089, -5914587, -5571855, -4735270, -3590008, -2318757, 
+		-1081195, 0, 845922, 1421346, 1729032, 1800222, 
+		1683416, 1433432, 1102377, 733614, 359119, 0, 
+		-330625
+		}; // end table
 
-// PART1 : DEMODULATION DATA
-int32_t coeffs_table_demodulate [] = {
--330625, 0, 359119, 733614, 1102377, 1433432, 
-1683416, 1800222, 1729032, 1421346, 845922, 0, 
--1081195, -2318757, -3590008, -4735270, -5571855, -5914587, 
--5601089, -4519063, -2632073, 0, 3209518, 6721652, 
-10168847, 13119499, 15119417, 15742881, 14648517, 11634040, 
-6683403, 0, -7979489, -16594376, -24993945, -32195137, 
--37160267, -38888647, -36514051, -29398683, -17214075, 0, 
-21805774, 47371588, 75511384, 104757736, 133463064, 159921024, 
-182497456, 199759408, 210590448, 214281776, 210590448, 199759408, 
-182497456, 159921024, 133463064, 104757736, 75511384, 47371588, 
-21805774, 0, -17214075, -29398683, -36514051, -38888647, 
--37160267, -32195137, -24993945, -16594376, -7979489, 0, 
-6683403, 11634040, 14648517, 15742881, 15119417, 13119499, 
-10168847, 6721652, 3209518, 0, -2632073, -4519063, 
--5601089, -5914587, -5571855, -4735270, -3590008, -2318757, 
--1081195, 0, 845922, 1421346, 1729032, 1800222, 
-1683416, 1433432, 1102377, 733614, 359119, 0, 
--330625
-}; // end table
+
+		// PART 2: MODULATION data: 32 bits used of 32 bits
+		int32_t coeffs_table_modulate [] = {
+		0, 0, 0, 
+		0, 4, 36, 
+		281, 1924, 11408, 
+		58661, 261610, 1011859, 
+		3394272, 9874953, 24916382, 
+		54525096, 103483112, 170335056, 
+		243164496, 301063328, 323278688, 
+		301063328, 243164496, 170335056, 
+		103483112, 54525096, 24916382, 
+		9874953, 3394272, 1011859, 
+		261610, 58661, 11408, 
+		1924, 281, 36, 
+		4, 0, 0, 
+		0,0
+		}; // end table
+
+const int firstnonzero_modulate=4; // element 4 = 5th element in table
+const int lastnonzero_modulate=36; // element 36 = 37th element in table
 
 
-// PART 2: MODULATION data
-int32_t coeffs_table_modulate [] = {
-0, 0, 0, 
-0, 4, 36, 
-281, 1924, 11408, 
-58661, 261610, 1011859, 
-3394272, 9874953, 24916382, 
-54525096, 103483112, 170335056, 
-243164496, 301063328, 323278688, 
-301063328, 243164496, 170335056, 
-103483112, 54525096, 24916382, 
-9874953, 3394272, 1011859, 
-261610, 58661, 11408, 
-1924, 281, 36, 
-4, 0, 0, 
-0,0
-}; // end table
+#else
+	#if _INTMATH == 3212
+		// PART1 : DEMODULATION DATA: 20 bits used of 32 bits
+		int32_t coeffs_table_demodulate [] = {
+		-160, 0, 175, 358, 538, 700, 822, 879,
+		844, 694, 413, 0, -527, -1131, -1752,
+		-2311, -2720, -2887, -2734, -2206, -1284,
+		0, 1567, 3282, 4965, 6406, 7383, 7687, 7153,
+		5681, 3263, 0, -3895, -8102, -12203, -15719,
+		-18144, -18988, -17828, -14354, -8404, 0,
+		10647, 23131, 36871, 51151, 65168, 78086,
+		89110, 97539, 102827, 104630, 102827, 97539,
+		89110, 78086, 65168, 51151, 36871, 23131, 10647,
+		0, -8404, -14354, -17828, -18988, -18144, -15719,
+		-12203, -8102, -3895, 0, 3263, 5681, 7153, 7687,
+		7383, 6406, 4965, 3282, 1567, 0, -1284, -2206,
+		-2734, -2887, -2720, -2311, -1752, -1131, -527,
+		0, 413, 694, 844, 879, 822, 700, 538, 358, 175,
+		0, -160
+		}; // end table
+
+		// PART 2: MODULATION data: 20 bits used of 32 bits
+		int32_t coeffs_table_modulate [] = {
+		0, 0, 0, 0, 0, 0, 0, 1, 6, 29,
+		128, 494, 1657, 4822, 12166,
+		26624, 50529, 83171, 118733, 147004,
+		157851, 147004, 118733, 83171,
+		50529, 26624, 12166, 4822, 1657, 494,
+		128, 29, 6, 1, 0, 0, 0, 0, 0, 0, 0
+		}; // end table
+const int firstnonzero_modulate=7; // element 7 = 8th element in table
+const int lastnonzero_modulate=33; // element 33 = 34th element in table
+
+
+#else
+	#if _INTMATH == 3210
+		// PART1 : DEMODULATION DATA: 22 bits used of 32 bits
+		int32_t coeffs_table_demodulate [] = {
+
+		-645, 0, 701, 1433, 2153, 2800, 3288, 3516,
+		3377, 2776, 1652, 0, -2111, -4528, -7011, -9248,
+		-10882, -11551, -10939, -8825, -5140, 0, 6269,
+		13128, 19861, 25624, 29530, 30748, 28610, 22723, 13054,
+		0, -15584, -32410, -48815, -62880, -72578, -75953,
+		-71316, -57418, -33620, 0, 42589, 92523, 147483,
+		204605, 260670, 312346, 356440, 390155, 411309, 418519,
+		411309, 390155, 356440, 312346, 260670, 204605, 147483,
+		92523, 42589, 0, -33620, -57418, -71316, -75953,
+		-72578, -62880, -48815, -32410, -15584, 0, 13054,
+		22723, 28610, 30748, 29530, 25624, 19861, 13128, 6269,
+		0, -5140, -8825, -10939, -11551, -10882, -9248, -7011,
+		-4528, -2111, 0, 1652, 2776, 3377, 3516, 3288, 2800,
+		2153, 1433, 701, 0, -645
+		}; // end table
+
+		// PART 2: MODULATION data: 22 bits used of 32 bits
+		int32_t coeffs_table_modulate [] = {
+		0, 0, 0, 0, 0, 0, 1, 4, 22, 115, 511, 1976, 6629, 19287,
+		48665, 106494, 202115, 332686, 474931, 588014, 631404,
+		588014, 474931, 332686, 202115, 106494, 48665, 19287,
+		6629, 1976, 511, 115, 22, 4, 1, 0, 0, 0, 0, 0, 0
+		}; // end table
+
+const int firstnonzero_modulate=6; // element 6 = 7th element in table
+const int lastnonzero_modulate=34; // element 34 = 35 element in table
+
 
 #endif
-
+#endif
+#endif
+#endif
 
 
 const int coeffs_size_demodulate=103;
@@ -160,10 +236,18 @@ const int buffersize_modulate=820; // coeffs_size_modulate * 20;
 
 ///////////////////////////////////////
 /// function firfilter for demodulation
+// floating point math: input = float, output = float
+// 64 bit integer math: input = 16 bit integer, output = 64 bit integer
+// 32 bit integer math: input = 16 bit integer, output = 32 bit integer
 #if _USEFLOAT == 1
 float firfilter_demodulate(float val) {
 #else
-signed long long firfilter_demodulate(int16_t val) {
+	#if _INTMATH == 64
+	int64_t firfilter_demodulate(int16_t val) {
+	#else
+	// int32_20 and int32_22
+	int32_t firfilter_demodulate(int16_t val) {
+	#endif
 #endif
 static int pointer;
 static int init=1;
@@ -177,9 +261,15 @@ float *ptr1;
 float *ptr2;
 #else
 static int16_t *buffer;
-signed long long retval;
 int16_t *ptr1;
 int32_t *ptr2;
+
+	#if _INTMATH == 64 
+	int64_t retval;
+	#else
+	// int32_20 and int32_22
+	int32_t retval;
+	#endif
 #endif
 
 int bufferloop;
@@ -208,7 +298,6 @@ if (init) {
 #endif
 
 	// init vars
-
 	pointer=coeffs_size_demodulate;
 
 	// END INIT
@@ -228,7 +317,12 @@ for (bufferloop=0;bufferloop<coeffs_size_demodulate;bufferloop++) {
 #if _USEFLOAT == 1
 	retval += (*ptr1++) * (*ptr2++);
 #else
-	retval += ((long long) *ptr1++) * ((long long) *ptr2++);
+# if _INTMATH == 64
+	retval += (((int64_t) *ptr1++) * ((int64_t) *ptr2++));
+#else
+	// int32_10 and int32_12
+	retval += (*ptr1++ * *ptr2++);
+#endif
 #endif
 }; // end for
 
@@ -254,7 +348,13 @@ return(retval);
 #if _USEFLOAT == 1
 float firfilter_modulate(float val) {
 #else
-signed long long firfilter_modulate(int16_t val) {
+	#if _INTMATH == 64
+	int64_t firfilter_modulate(int16_t val) {
+	#else
+	// int32_10 and int32_12
+	int32_t firfilter_modulate(int16_t val) {
+	#endif
+
 #endif
 
 static int pointer;
@@ -266,11 +366,20 @@ static float *buffer;
 float retval;
 float *ptr1;
 float *ptr2;
+float *p_firstnonzero_modulate;
 #else
 static int16_t *buffer;
-signed long long retval;
 int16_t *ptr1;
 int32_t *ptr2;
+int32_t *p_firstnonzero_modulate;
+
+	#if _INTMATH == 64
+		int64_t retval;
+	#else
+		// int32_10 and int32_12
+		int32_t retval;
+	#endif
+
 #endif
 
 int bufferloop;
@@ -302,6 +411,7 @@ if (init) {
 	// init vars
 
 	pointer=coeffs_size_modulate;
+	p_firstnonzero_modulate=&coeffs_table_modulate[firstnonzero_modulate];
 
 	// END INIT
 }; // end if
@@ -313,14 +423,20 @@ pointer++;
 
 // go throu all the elements of the coeffs table
 ptr1=&buffer[pointer-coeffs_size_modulate];
-ptr2=coeffs_table_modulate;
+ptr2=p_firstnonzero_modulate;
 
 retval=0;
-for (bufferloop=0;bufferloop<coeffs_size_modulate;bufferloop++) {
+for (bufferloop=firstnonzero_modulate;bufferloop<=lastnonzero_modulate;bufferloop++) {
+//printf("loop = %d, v = %d %d, retval = %d\n",bufferloop,*ptr1, *ptr2, retval);
 #if _USEFLOAT == 1
 	retval += (*ptr1++) * (*ptr2++);
 #else
-	retval += ((long long) *ptr1++) * ((long long) *ptr2++);
+#if _INTMATH == 64
+	retval += ((int64_t) *ptr1++) * ((int64_t) *ptr2++);
+#else
+	// int32_10 adn int32_1
+	retval += (*ptr1++ * *ptr2++);
+#endif
 #endif
 }; // end for
 
@@ -373,7 +489,19 @@ if (init) {
 #if _USEFLOAT == 1
 filterret=firfilter_demodulate((float)audioin);
 #else
-filterret=firfilter_demodulate(audioin);
+	#if _INTMATH == 3210
+	// reduce audio to 10 bits (down from 16)
+	filterret=firfilter_demodulate(audioin >> 6);
+	#else
+	#if _INTMATH == 3212
+	// reduce audio to 12 bits (down from 16)
+	filterret=firfilter_demodulate(audioin >> 4);
+	#else
+	// 64 bit integer math: process audio as 16 bits
+	filterret=firfilter_demodulate(audioin);
+	#endif
+	#endif
+
 #endif
 
 // audio invert: (0:no), 1:receive, (2:transmit), 3=both
