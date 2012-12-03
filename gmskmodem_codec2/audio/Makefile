@@ -1,11 +1,25 @@
-# Make file
+all: audioplay audiocap_c2udp_keyin audiocap_c2udp_gpio audiocap_c2stdout_keyin audiocap_c2stdout_gpio
+
+audioplay: audioplay.c Makefile
+	gcc -Wall -O3 -o audioplay audioplay.c -lportaudio -lcodec2
+
+audiocap_c2udp_keyin: audiocap_c2udp_keyin.c Makefile
+	gcc -Wall -O3 -o audiocap_c2udp_keyin audiocap_c2udp_keyin.c -lportaudio -lcodec2
+
+audiocap_c2udp_gpio: audiocap_c2udp_gpio.c Makefile
+	gcc -Wall -O3 -o audiocap_c2udp_gpio audiocap_c2udp_gpio.c -lportaudio -lcodec2
+
+audiocap_c2stdout_keyin: audiocap_c2stdout_keyin.c Makefile
+	gcc -Wall -O3 -o audiocap_c2stdout_keyin audiocap_c2stdout_keyin.c -lportaudio -lcodec2
+
+audiocap_c2stdout_gpio: audiocap_c2stdout_gpio.c Makefile
+	gcc -Wall -O3 -o audiocap_c2stdout_gpio audiocap_c2stdout_gpio.c -lportaudio -lcodec2
 
 
-all: audiocap_c2_key audiocap_pcm_gpio
-
-audiocap_c2_key:  Makefile c2encap.h audiocap_c2_key.c
-	gcc -O3 -Wall -o audiocap_c2_key audiocap_c2_key.c -lasound -lcodec2
-
-audiocap_pcm_gpio:  Makefile audiocap_pcm_gpio.c
-	gcc -O3 -Wall -o audiocap_pcm_gpio audiocap_pcm_gpio.c -lasound 
+install:
+	install -o root -g root -m 755 audioplay /usr/local/bin
+	install -o root -g root -m 755 audiocap_c2udp_keyin /usr/local/bin
+	install -o root -g root -m 755 audiocap_c2udp_gpio /usr/local/bin
+	install -o root -g root -m 755 audiocap_c2stdout_keyin /usr/local/bin
+	install -o root -g root -m 755 audiocap_c2stdout_gpio /usr/local/bin
 
