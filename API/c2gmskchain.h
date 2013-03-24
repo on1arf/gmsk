@@ -23,6 +23,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // functions:
@@ -34,7 +36,7 @@
 
 
 // check chain signature
-int checksign_chain (msgchain * chain) {
+int checksign_chain (struct c2gmsk_msgchain * chain) {
 // used for sanity checking
 
 // does it point somewhere?
@@ -57,16 +59,16 @@ return(C2GMSK_RET_OK);
 
 
 // C2GMSK CHAIN
-msgchain * c2gmskchain_new (int size, int * ret) {
+struct c2gmsk_msgchain * c2gmskchain_new (int size, int * ret) {
 // create memory structure for chain
 
 // before calling chain_new, the chain value must be set to zero. This is to
 // avoid doing a "new" on a chain that alread exists
-msgchain * newchain;
+struct c2gmsk_msgchain * newchain;
 
 
 // allocate memory for chain
-newchain=malloc(sizeof (msgchain));
+newchain=malloc(sizeof (struct c2gmsk_msgchain));
 
 if (!newchain) {
 	// malloc failed
@@ -100,7 +102,7 @@ return(newchain);
 
 ////////////////
 
-int c2gmskchain_destroy (msgchain * chain) {
+int c2gmskchain_destroy (struct c2gmsk_msgchain * chain) {
 // free memory of chain
 int ret;
 
@@ -124,7 +126,7 @@ return (C2GMSK_RET_OK);
 ///////////////////////
 
 ///// add data on replychain
-int c2gmskchain_add (msgchain * chain, void * data, int size) {
+int c2gmskchain_add (struct c2gmsk_msgchain * chain, void * data, int size) {
 int ret;
 
 // return if size is zero or less then 0
@@ -183,7 +185,7 @@ return(C2GMSK_RET_OK);
 
 ///////
 // memory chain reinit
-int c2gmskchain_reinit (msgchain * chain, int size) {
+int c2gmskchain_reinit (struct c2gmsk_msgchain * chain, int size) {
 int ret;
 
 // sanitry check. Does not point somewhere?

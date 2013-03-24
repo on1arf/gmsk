@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 // interleave_c2.h
 

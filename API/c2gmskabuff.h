@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // C2GMSK AUDIO BUFFERS
@@ -47,7 +49,7 @@ return(C2GMSK_RET_OK);
 ///////////////////////
 
 // ADD TO BUFFER
-int c2gmskabuff48_add (audiobuff40_48k * buffer, int16_t *in, int numsample, msgchain * chain) {
+int c2gmskabuff48_add (audiobuff40_48k * buffer, int16_t *in, int numsample, struct c2gmsk_msgchain * chain) {
 int samplestodo;
 int samplesnow;
 int16_t * p_in;
@@ -124,7 +126,7 @@ return(C2GMSK_RET_OK);
 }; // end function abuffer add
 
 // FLUSH BUFFER
-int c2gmskabuff48_flush (audiobuff40_48k * buffer, msgchain * chain) {
+int c2gmskabuff48_flush (audiobuff40_48k * buffer, struct c2gmsk_msgchain * chain) {
 int ret;
 
 // sanity checks

@@ -29,6 +29,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 
@@ -51,26 +53,27 @@
 
 #include <errno.h>
 
-#include "gmskmodemapi.h"
+#include <c2gmsk.h>
 
 
 // functions written below
-void write_audio_to_file(int, c2gmsk_msg *);
+void write_audio_to_file(int, struct c2gmsk_msg *);
 
 ///////////////////////
 // application starts here
 
-int main () {
-session * sessid=NULL;
-msgchain * chain=NULL, ** pchain;
-c2gmsk_param param;
+int main (int argc, char ** argv) {
+struct c2gmsk_session * sessid=NULL;
+struct c2gmsk_msgchain * chain=NULL, ** pchain;
+struct c2gmsk_msg * msg;
+struct c2gmsk_param param;
+
 int16_t silence[480]; // 480 samples = 10 ms @ 48Khz samplerate
 int tod, numsample, msgnr;
 int framecount;
 
 int f_out, f_in; // file out and file in 
-
-c2gmsk_msg * msg;
+char * infilename, * outfilename; // names in input and output files
 
 int ret;
 int loop;
@@ -80,11 +83,20 @@ int nsample;
 unsigned char inbuffer[7];
 
 
+// check parameters, we need at least 2 parameters: infile and outfile
+if (argc < 3) {
+	fprintf(stderr,"Error: at least 2 parameters needed.\nUsage: %s infile.c2 modaudiofile.raw \n",argv[0]);
+	exit(-1);
+} else {
+	infilename=argv[1];
+	outfilename=argv[2];
+}; // end else - if
+
 // fill silence will all zero
 memset(&silence,0,sizeof(silence));
 
 // open out file
-f_out=open("test.raw",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+f_out=open(outfilename,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
 if (f_out < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
@@ -93,7 +105,7 @@ if (f_out < 0) {
 
 
 // open input file
-f_in=open("c2in.c2",O_RDONLY);
+f_in=open(infilename,O_RDONLY);
 
 if (f_in < 0) {
 	fprintf(stderr,"Error: could not open file for input: %d (%s)! \n",errno,strerror(errno));
@@ -264,7 +276,7 @@ return(0);
 /////////////////////////////////////////////
 /// function write_to_file
 
-void write_audio_to_file(int file_out, c2gmsk_msg * msg) {
+void write_audio_to_file(int file_out, struct c2gmsk_msg * msg) {
 int nsample, ret;
 int16_t pcmbuffer[1920];
 

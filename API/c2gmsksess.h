@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2gmsk API sessions
@@ -31,7 +33,7 @@
 
 
 // support function: check session signature
-int checksign_sess (session * sessid) {
+int checksign_sess (struct c2gmsk_session * sessid) {
 
 // used for sanity checking
 // does the sessid point somewhere?
@@ -53,8 +55,8 @@ return(C2GMSK_RET_OK);
 
 /////////////////////////////////////
 // support functions: new and destroy
-session * c2gmsk_sess_new (c2gmsk_param * param , int * ret, msgchain ** out) {
-session *newsessid;
+struct c2gmsk_session * c2gmsk_sess_new (struct c2gmsk_param * param , int * ret, struct c2gmsk_msgchain ** out) {
+struct c2gmsk_session *newsessid;
 int ret2;
 
 // check signature
@@ -78,7 +80,7 @@ if (param->expected_apiversion > C2GMSK_APIVERSION) {
 }; // end if
 
 // allocate memory for new structure
-newsessid=malloc(sizeof(session));
+newsessid=malloc(sizeof(struct c2gmsk_session));
 
 if (!newsessid) {
 	// could not allocate memory
@@ -157,7 +159,7 @@ return(newsessid);
 // FUNCTION C2GMSK_DESTROY
 // free allocated memory
 
-int c2gmsk_sess_destroy (session * sessid) {
+int c2gmsk_sess_destroy (struct c2gmsk_session * sessid) {
 
 int ret;
 

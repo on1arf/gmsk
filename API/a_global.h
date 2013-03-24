@@ -5,6 +5,10 @@
 // GMSKMODEM for CODEC2 _ API version
 
 // version 20130122: initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
+
+
 
 /*
  *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF

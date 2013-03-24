@@ -39,6 +39,8 @@
 // Version 20111213: initial release modulation
 // Version 20120105: no change
 // Version 20130228: modified for API: local vars moved to session
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 
@@ -241,13 +243,13 @@ const int buffersize_modulate=820; // coeffs_size_modulate * 20;
 // 64 bit integer math: input = 16 bit integer, output = 64 bit integer
 // 32 bit integer math: input = 16 bit integer, output = 32 bit integer
 #if _USEFLOAT == 1
-float firfilter_demodulate(session * sessid, float val) {
+float firfilter_demodulate(struct c2gmsk_session * sessid, float val) {
 #else
 	#if _INTMATH == 64
-	int64_t firfilter_demodulate(session * sessid, int16_t val) {
+	int64_t firfilter_demodulate(struct c2gmsk_session * sessid, int16_t val) {
 	#else
 	// int32_20 and int32_22
-	int32_t firfilter_demodulate(session * sessid, int16_t val) {
+	int32_t firfilter_demodulate(struct c2gmsk_session * sessid, int16_t val) {
 	#endif
 #endif
 
@@ -360,13 +362,13 @@ return(retval);
 ///////////////////////////////////////
 /// function firfilter for modulation
 #if _USEFLOAT == 1
-float firfilter_modulate(session * sessid, float val) {
+float firfilter_modulate(struct c2gmsk_session * sessid, float val) {
 #else
 	#if _INTMATH == 64
-	int64_t firfilter_modulate(session * sessid, int16_t val) {
+	int64_t firfilter_modulate(struct c2gmsk_session * sessid, int16_t val) {
 	#else
 	// int32_10 and int32_12
-	int32_t firfilter_modulate(session * sessid, int16_t val) {
+	int32_t firfilter_modulate(struct c2gmsk_session * sessid, int16_t val) {
 	#endif
 
 #endif
@@ -482,7 +484,7 @@ return(retval);
 
 ///////////////////////////////////////
 /// function demodulate
-int demodulate (session * sessid, int16_t audioin) {
+int demodulate (struct c2gmsk_session * sessid, int16_t audioin) {
 
 // static vars moved to "session"
 // static int init=1;

@@ -1,5 +1,26 @@
 // gmsk modem for codec2 - API version
 
+// version 20130122: initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
+
+
+
+/*
+ *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
+ *
+ *      This program is free software; you can redistribute it and/or modify
+ *      it under the terms of the GNU General Public License as published by
+ *      the Free Software Foundation; version 2 of the License.
+ *
+ *      This program is distributed in the hope that it will be useful,
+ *      but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *      GNU General Public License for more details.
+ */
+
+
+
 // defines
 // version id
 #define C2GMSK_APIVERSION 20130321
@@ -115,11 +136,11 @@ char *c2gmsk_str_statdem[C2GMSK_STATDEM_HIGHEST+1];
 // return message structures
 
 // generic structure
-typedef struct {
+struct c2gmsk_msg {
 	int tod; // type of data
 	int datasize; // whatever size it is
 	unsigned char data[]; // unknown size, will not be included in sizeof
-} c2gmsk_msg; 
+}; 
 
 
 // return messages concisting of 0, 1, 2, 3 or 4 data fields
@@ -212,7 +233,7 @@ typedef struct {
 
 
 // memory chain structure
-typedef struct {
+struct c2gmsk_msgchain {
 	unsigned char signature[4]; // contains signature
 	
 	int size; // total size of chain
@@ -221,14 +242,14 @@ typedef struct {
 	int s_pos; // search-position in octets
 	int s_numelem; // search-position in number-of-element
 	unsigned char * data; // pointer to datastructure
-} msgchain; // structure for memory chain
+}; // structure for memory chain
 
 
 // parameters structure
 
 // GLOBAL parameters per c2gmsk SESSION
 // used to init parameters when creating new session
-typedef struct {
+struct c2gmsk_param {
 	// the first two fields (signature) and expected API version must always be
 	// be located in the beginning of the parameter function, no matter what
 	// APIversion is used
@@ -242,7 +263,7 @@ typedef struct {
 
 	// parameters for demodulation
 	int d_disableaudiolevelcheck;
-} c2gmsk_param;
+};
 
 
 
@@ -256,7 +277,7 @@ typedef struct {
 } audiobuff40_48k;
 
 // session
-typedef struct {
+struct c2gmsk_session {
 	unsigned char signature[4]; // contains signature
 
 
@@ -265,7 +286,7 @@ typedef struct {
 	int m_version;
 
 	// data for modulator
-	msgchain * m_chain;
+	struct c2gmsk_msgchain * m_chain;
 	audiobuff40_48k m_abuff;
 	
 	int m_state;
@@ -290,7 +311,7 @@ typedef struct {
 	int d_disableaudiolevelcheck;
 
 	// data for demodulator
-	msgchain * d_chain; 
+	struct c2gmsk_msgchain * d_chain; 
 
 	int d_state;
 	int d_audioinvert;
@@ -347,35 +368,35 @@ typedef struct {
 	int16_t *dd_filt_buffer;
 #endif
 
-} session;
+};
 
 
 // supportfunctions
 
 // session support functions
-int checksign_sess(session * sessid);
-session * c2gmsk_sess_new (c2gmsk_param *param, int * ret, msgchain ** out);
-int c2gmsk_sess_destroy (session * sessid);
+int checksign_sess(struct c2gmsk_session * sessid);
+struct c2gmsk_session * c2gmsk_sess_new (struct c2gmsk_param *param, int * ret, struct c2gmsk_msgchain ** out);
+int c2gmsk_sess_destroy (struct c2gmsk_session * sessid);
 
 // functions related to chains
-msgchain * c2gmskchain_new (int size, int * ret);
-int c2gmskchain_destroy (msgchain * chain);
-int c2gmskchain_add (msgchain * chain, void * data, int size);
-int c2gmskchain_reinit (msgchain * chain, int size);
+struct c2gmsk_msgchain * c2gmskchain_new (int size, int * ret);
+int c2gmskchain_destroy (struct c2gmsk_msgchain * chain);
+int c2gmskchain_add (struct c2gmsk_msgchain * chain, void * data, int size);
+int c2gmskchain_reinit (struct c2gmsk_msgchain * chain, int size);
 
 // audio buffer functions for PCM 48k
-int c2gmskabuff48_add (audiobuff40_48k * buffer, int16_t *in, int numsample, msgchain * chain);
-int c2gmskabuff48_flush (audiobuff40_48k * buffer, msgchain * chain);
-int c2gmskabuff48_modulatebits (session * sessid, unsigned char *in, int nbits, int orderinvert);
+int c2gmskabuff48_add (audiobuff40_48k * buffer, int16_t *in, int numsample, struct c2gmsk_msgchain * chain);
+int c2gmskabuff48_flush (audiobuff40_48k * buffer, struct c2gmsk_msgchain * chain);
+int c2gmskabuff48_modulatebits (struct c2gmsk_session * sessid, unsigned char *in, int nbits, int orderinvert);
 
 // printbit functions
-int queue_debug_bit_init (session * sessid);
-int queue_debug_bit (session * sessid, int bit);
-int queue_debug_bit_flush (session * sessid);
+int queue_debug_bit_init (struct c2gmsk_session * sessid);
+int queue_debug_bit (struct c2gmsk_session * sessid, int bit);
+int queue_debug_bit_flush (struct c2gmsk_session * sessid);
 
-int queue_debug_allbit_init (session * sessid);
-int queue_debug_allbit (session * sessid, int bit);
-int queue_debug_allbit_flush (session * sessid);
+int queue_debug_allbit_init (struct c2gmsk_session * sessid);
+int queue_debug_allbit (struct c2gmsk_session * sessid, int bit);
+int queue_debug_allbit_flush (struct c2gmsk_session * sessid);
 
 
 // print string functions
@@ -386,30 +407,30 @@ char * c2gmsk_printstr_avglvltest (int msg);
 char * c2gmsk_printstr_statdem (int msg);
 
 // parameter support functions
-int c2gmsk_param_init (c2gmsk_param *);
-int checksign_param (c2gmsk_param * param);
+int c2gmsk_param_init (struct c2gmsk_param * param);
+int checksign_param (struct c2gmsk_param * param);
 
 
 // API calls itself
-int c2gmsk_mod_init (session * sessid, c2gmsk_param *param);
-int c2gmsk_mod_start (session * sessid,  msgchain ** out);
-int c2gmsk_mod_voice1400 (session * sessid, unsigned char * c2dataframe, msgchain ** out);
-int c2gmsk_mod_voice1400_end (session * sessid, msgchain ** out);
-int c2gmsk_mod_audioflush (session * sessid, msgchain ** out);
+int c2gmsk_mod_init (struct c2gmsk_session * sessid, struct c2gmsk_param *param);
+int c2gmsk_mod_start (struct c2gmsk_session * sessid,  struct c2gmsk_msgchain ** out);
+int c2gmsk_mod_voice1400 (struct c2gmsk_session * sessid, unsigned char * c2dataframe, struct c2gmsk_msgchain ** out);
+int c2gmsk_mod_voice1400_end (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
+int c2gmsk_mod_audioflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
 
-int c2gmsk_demod (session * sessid, int16_t  * in, msgchain ** out);
-int c2gmsk_demod_init (session * sessid, c2gmsk_param *param);
+int c2gmsk_demod (struct c2gmsk_session * sessid, int16_t  * in, struct c2gmsk_msgchain ** out);
+int c2gmsk_demod_init (struct c2gmsk_session * sessid, struct c2gmsk_param *param);
 
 
 
 // function to search in msgchains
-void * c2gmsk_msgchain_search (int where, msgchain * chain, int * tod, int * datasize, int * numelem);
-void * c2gmsk_msgchain_search_tod (int where, msgchain * chain, int tod, int * datasize, int * numelem);
+void * c2gmsk_msgchain_search (int where, struct c2gmsk_msgchain * chain, int * tod, int * datasize, int * numelem);
+void * c2gmsk_msgchain_search_tod (int where, struct c2gmsk_msgchain * chain, int tod, int * datasize, int * numelem);
 
-char * c2gmsk_msgdecode_printbit (c2gmsk_msg * msg, char * txtbuffer, int marker);
-int c2gmsk_msgdecode_numeric (c2gmsk_msg * msg, int *data);
-int c2gmsk_msgdecode_c2 (c2gmsk_msg * msg, unsigned char * c2buff);
-int c2gmsk_msgdecode_pcm48k (c2gmsk_msg * msg, int16_t * c2buff);
+char * c2gmsk_msgdecode_printbit (struct c2gmsk_msg * msg, char * txtbuffer, int marker);
+int c2gmsk_msgdecode_numeric (struct c2gmsk_msg * msg, int *data);
+int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff);
+int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t * c2buff);
 
 
 // get version

@@ -21,6 +21,8 @@
 // Release information
 // version 20120527: initial release
 // version 20130310: initial release API version, no change
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2_fec.h

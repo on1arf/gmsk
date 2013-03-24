@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2gmsk API  numeric messages: 0 up to 4 return values
@@ -35,7 +37,7 @@
 ////////////// MOD CHAIN
 
 // queue MESSAGES: no additional data
-int queue_m_msg_0 (session * sessid, int message) {
+int queue_m_msg_0 (struct c2gmsk_session * sessid, int message) {
 c2gmsk_msg_0 msg;
 int ret;
 
@@ -54,7 +56,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 1 datafield to send
-int queue_m_msg_1 (session * sessid, int message, int data0) {
+int queue_m_msg_1 (struct c2gmsk_session * sessid, int message, int data0) {
 c2gmsk_msg_1 msg;
 int ret;
 
@@ -74,7 +76,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 2 datafield to send
-int queue_m_msg_2 (session * sessid, int message, int data0, int data1) {
+int queue_m_msg_2 (struct c2gmsk_session * sessid, int message, int data0, int data1) {
 c2gmsk_msg_2 msg;
 int ret;
 
@@ -95,7 +97,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 3 datafield to send
-int queue_m_msg_3 (session * sessid, int message, int data0, int data1, int data2) {
+int queue_m_msg_3 (struct c2gmsk_session * sessid, int message, int data0, int data1, int data2) {
 c2gmsk_msg_3 msg;
 int ret;
 
@@ -117,7 +119,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 4 datafield to send
-int queue_m_msg_4 (session * sessid, int message, int data0, int data1, int data2, int data3) {
+int queue_m_msg_4 (struct c2gmsk_session * sessid, int message, int data0, int data1, int data2, int data3) {
 c2gmsk_msg_4 msg;
 int ret;
 
@@ -143,7 +145,7 @@ return(ret);
 
 /////////////////////////
 // QUEUE NO_DATA IF NOTHING IN QUEUE
-int queue_m_nodataifempty (session * sessid) {
+int queue_m_nodataifempty (struct c2gmsk_session * sessid) {
 // sanity checks
 int ret;
 
@@ -165,7 +167,7 @@ return(C2GMSK_RET_OK);
 ///////////////// DEMOD CHAIN
 
 // queue MESSAGES: no additional data
-int queue_d_msg_0 (session * sessid, int message) {
+int queue_d_msg_0 (struct c2gmsk_session * sessid, int message) {
 c2gmsk_msg_0 msg;
 int ret;
 
@@ -184,7 +186,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 1 datafield to send
-int queue_d_msg_1 (session * sessid, int message, int data0) {
+int queue_d_msg_1 (struct c2gmsk_session * sessid, int message, int data0) {
 c2gmsk_msg_1 msg;
 int ret;
 
@@ -204,7 +206,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 2 datafield to send
-int queue_d_msg_2 (session * sessid, int message, int data0, int data1) {
+int queue_d_msg_2 (struct c2gmsk_session * sessid, int message, int data0, int data1) {
 c2gmsk_msg_2 msg;
 int ret;
 
@@ -225,7 +227,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 3 datafield to send
-int queue_d_msg_3 (session * sessid, int message, int data0, int data1, int data2) {
+int queue_d_msg_3 (struct c2gmsk_session * sessid, int message, int data0, int data1, int data2) {
 c2gmsk_msg_3 msg;
 int ret;
 
@@ -247,7 +249,7 @@ return(ret);
 }; // end function
 
 // queue MESSAGES: 4 datafield to send
-int queue_d_msg_4 (session * sessid, int message, int data0, int data1, int data2, int data3) {
+int queue_d_msg_4 (struct c2gmsk_session * sessid, int message, int data0, int data1, int data2, int data3) {
 c2gmsk_msg_4 msg;
 int ret;
 
@@ -273,7 +275,7 @@ return(ret);
 
 /////////////////////////
 // QUEUE NO_DATA IF NOTHING IN QUEUE
-int queue_d_nodataifempty (session * sessid) {
+int queue_d_nodataifempty (struct c2gmsk_session * sessid) {
 // sanity checks
 int ret;
 

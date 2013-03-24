@@ -29,7 +29,8 @@
 
 // Release information
 // version 20130310: initial release
-// version 20130314: sess_new parameters via structure, c2gmskversionid via versionid-table, 
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 //////////////////////
@@ -112,7 +113,7 @@
 //// c2gmsk_mod_voice1400
 //// c2gmsk_mod_voice1400_end
 
-int c2gmsk_mod_voice1400 (session *sessid, unsigned char *c2dataframe, msgchain **out) {
+int c2gmsk_mod_voice1400 (struct c2gmsk_session *sessid, unsigned char *c2dataframe, struct c2gmsk_msgchain **out) {
 // MODULATE CHAIN. 1400 bps voice frame
 
 unsigned char outbuffer[24];
@@ -199,7 +200,7 @@ return(C2GMSK_RET_OK);
 }; // end function c2gmsk modulate 1400 voice frame
 
 
-int c2gmsk_mod_voice1400_end (session *sessid, msgchain **out) {
+int c2gmsk_mod_voice1400_end (struct c2gmsk_session *sessid, struct c2gmsk_msgchain **out) {
 // MODULATE CHAIN. 1400 bps voice frame
 
 unsigned char outbuffer[24];
@@ -294,7 +295,7 @@ return(C2GMSK_RET_OK);
 ///////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
 
-int c2gmsk_mod_init (session * sessid, c2gmsk_param * param) {
+int c2gmsk_mod_init (struct c2gmsk_session * sessid, struct c2gmsk_param * param) {
 int ret;
 
 // sanity checks
@@ -345,7 +346,7 @@ return(C2GMSK_RET_OK);
 }; // end function c2gmsk_mod_init
 
 
-int c2gmsk_mod_start (session *sessid, msgchain **out) {
+int c2gmsk_mod_start (struct c2gmsk_session *sessid, struct c2gmsk_msgchain **out) {
 // MODULATE CHAIN. START stream
 
 // local data
@@ -449,7 +450,7 @@ return(C2GMSK_RET_OK);
 
 ///////////////
 // function c2gmsk demodulation init
-int c2gmsk_demod_init (session * sessid, c2gmsk_param * param) {
+int c2gmsk_demod_init (struct c2gmsk_session * sessid, struct c2gmsk_param * param) {
 int ret;
 int loop;
 	
@@ -539,7 +540,7 @@ return(C2GMSK_RET_OK);
 
 //////////////////
 // function c2gmsk_demodulate
-int c2gmsk_demod (session *sessid, int16_t *in, msgchain ** out) {
+int c2gmsk_demod (struct c2gmsk_session *sessid, int16_t *in, struct c2gmsk_msgchain ** out) {
 int ret, demod_retval;
 int loop, sampleloop;
 int16_t *samplepointer;
@@ -1254,7 +1255,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 				if ((sessid->d_endfound==0) || (memcmp(allempty,sessid->d_codec2frame,7))) {
 
 					msg.tod=C2GMSK_MSG_CODEC2;
-					msg.datasize=sizeof(msg) - sizeof(c2gmsk_msg); // should be "7", however, due to work-alligment rules, it can be larger
+					msg.datasize=sizeof(msg) - sizeof(struct c2gmsk_msg); // should be "7", however, due to work-alligment rules, it can be larger
 																					// so use "size" functions to be platform independant
 					msg.realsize=C2GMSK_CODEC2_FRAMESIZE_1400;
 					msg.version=C2GMSK_CODEC2_1400;

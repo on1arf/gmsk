@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2gmsk "printbit" functions: return bitdump of received data
@@ -35,7 +37,7 @@
 ///////////////
 
 ///////////////
-int queue_debug_bit_init (session * sessid) {
+int queue_debug_bit_init (struct c2gmsk_session * sessid) {
 int ret;
 
 // sanity check
@@ -52,7 +54,7 @@ return(C2GMSK_RET_OK);
 
 
 ///////////////
-int queue_debug_bit (session * sessid, int bit) {
+int queue_debug_bit (struct c2gmsk_session * sessid, int bit) {
 int ret;
 
 // sanity checks
@@ -80,7 +82,7 @@ return(C2GMSK_RET_OK);
 
 
 //////////////////
-int queue_debug_bit_flush (session * sessid) {
+int queue_debug_bit_flush (struct c2gmsk_session * sessid) {
 int ret;
 
 ret=checksign_sess(sessid);
@@ -136,7 +138,7 @@ return(C2GMSK_RET_OK);
 //////////////////////
 // PART 2: PRINT ALL BIT (verbose printbit)
 ///////////////
-int queue_debug_allbit_init (session * sessid) {
+int queue_debug_allbit_init (struct c2gmsk_session * sessid) {
 int ret;
 
 // sanity check
@@ -153,7 +155,7 @@ return(C2GMSK_RET_OK);
 
 
 ///////////////
-int queue_debug_allbit (session * sessid, int bit) {
+int queue_debug_allbit (struct c2gmsk_session * sessid, int bit) {
 int ret;
 
 // sanity checks
@@ -181,7 +183,7 @@ return(C2GMSK_RET_OK);
 
 
 //////////////////
-int queue_debug_allbit_flush (session * sessid) {
+int queue_debug_allbit_flush (struct c2gmsk_session * sessid) {
 int ret;
 
 ret=checksign_sess(sessid);

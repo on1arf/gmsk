@@ -29,6 +29,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 
@@ -51,15 +53,15 @@
 
 #include <errno.h>
 
-#include "gmskmodemapi.h"
+#include <c2gmsk.h>
 
-int main () {
+int main (int argc, char ** argv) {
 
 // API structures
-session * sessid=NULL;
-msgchain * chain=NULL; msgchain ** pchain; // pointer to pointer of message chain
-c2gmsk_param param;
-c2gmsk_msg * msg;
+struct c2gmsk_session * sessid=NULL;
+struct c2gmsk_msgchain * chain=NULL,  ** pchain; // pointer to pointer of message chain
+struct c2gmsk_param param;
+struct c2gmsk_msg * msg;
 
 // buffers for data
 char txtline[203]; // text line for "printbit". Should normally by up to 192, add 3 for "space + marker" and terminating null, add 8 for headroom for PLL syncing-errors
@@ -67,6 +69,7 @@ unsigned char c2buff[8]; // buffer is 8 octets: to accomodate all bitrates (1200
 int16_t pcmbuffer[1920]; // 40 ms audio @ 48000 = 1920 samples = 3840 octets
 
 int fout, fin; // file out and file in 
+char * infilename, * outfilename; // filename input and output files
 
 // some local vars
 int framecount, msgcount;
@@ -82,8 +85,17 @@ int data[4]; // used for numeric data
 char * bitrate2text[] = { "2400", "4800"};
 
 
+// check parameters, we need at least 2 parameters: infile and outfile
+if (argc < 3) {
+	fprintf(stderr,"Error: at least 2 parameters needed.\nUsage: %s modaudiofile.raw outfile.c2\n",argv[0]);
+	exit(-1);
+} else {
+	infilename=argv[1];
+	outfilename=argv[2];
+}; // end else - if
+
 // open out file
-fout=open("c2out.c2",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+fout=open(outfilename,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
 if (fout < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
@@ -92,7 +104,7 @@ if (fout < 0) {
 
 
 // open input file
-fin=open("test.raw",O_RDONLY);
+fin=open(infilename,O_RDONLY);
 
 if (fin < 0) {
 	fprintf(stderr,"Error: could not open file for input: %d (%s)! \n",errno,strerror(errno));

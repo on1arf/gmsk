@@ -1,8 +1,6 @@
 /* gmskmodulate.h */
 // API release
 
-// This code is part of the "gmsksender" application
-
 /*
  *      Copyright (C) 2011 - 2013 by Kristoff Bonne, ON1ARF
  *
@@ -20,6 +18,8 @@
 // Release information:
 // version 20111213: initial release
 // version 20130310: API release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 int16_t process_return (int64_t filterret) {
@@ -54,7 +54,7 @@ return(filterret16);
 }; // end function process_return
 
 
-int modulate1bit (session * sessid, int bit, int16_t * audioret) {
+int modulate1bit (struct c2gmsk_session * sessid, int bit, int16_t * audioret) {
 // local vars
 int loop;
 int ret;

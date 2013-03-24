@@ -11,6 +11,10 @@
 // version 20111107: initial release
 // version 20120607: add 32 bit version, add _frommsb versions
 // version 20130310: API release: no change
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
+
+
 
 /*
  *      Copyright (C) 2011 - 2013 by Kristoff Bonne, ON1ARF

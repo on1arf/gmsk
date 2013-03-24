@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2gmsk highlevel modulate functions
@@ -30,7 +32,7 @@
 
 
 // ADD TO BUFFER
-int c2gmskabuff48k_modulatebits (session * sessid, unsigned char * in, int nbits, int orderinvert) {
+int c2gmskabuff48k_modulatebits (struct c2gmsk_session * sessid, unsigned char * in, int nbits, int orderinvert) {
 // modulate bits, add to m_audio buffer
 
 // local vars
@@ -145,7 +147,7 @@ return(C2GMSK_RET_OK);
 /////////////////////////////////////////////////
 // flush audio-buffers of modulation chain
 /////////////////////////////////////////////////
-int c2gmsk_mod_audioflush (session * sessid, msgchain ** out) {
+int c2gmsk_mod_audioflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out) {
 // local vars
 int ret;
 

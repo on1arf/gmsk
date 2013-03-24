@@ -20,6 +20,8 @@
 
 // Release information
 // version 20130310 initial release
+// Version 20130314: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 
 // c2gmsk API user-level support functions
@@ -39,7 +41,7 @@
 // INIT GLOBAL PARAMS 
 
 ///// create and initiaise parameters
-int c2gmsk_param_init (c2gmsk_param * param) {
+int c2gmsk_param_init (struct c2gmsk_param * param) {
 
 
 // do nothing if pointer = NULL
@@ -66,7 +68,7 @@ return(C2GMSK_RET_OK);
 
 
 ///// check signature
-int checksign_param (c2gmsk_param * param) {
+int checksign_param (struct c2gmsk_param * param) {
 // does it point somewhereN
 if (!param) {
 	return(C2GMSK_RET_NOVALIDPARAMS);
@@ -85,7 +87,7 @@ return(C2GMSK_RET_OK);
 ////////////////////////////////////////////////
 ///////////// MSGCHAIN SEARCH 
 
-void * c2gmsk_msgchain_search (int where, msgchain * chain, int * tod, int *datasize, int * numelem) {
+void * c2gmsk_msgchain_search (int where, struct c2gmsk_msgchain * chain, int * tod, int *datasize, int * numelem) {
 int ret;
 
 void * posnext;
@@ -103,14 +105,14 @@ if (where == C2GMSK_SEARCH_POSSTART)  {
 }; // end if
 
 if ((chain->s_pos < chain->used) && (chain->s_numelem < chain->numelem)) {
-	c2gmsk_msg * thismsg;
+	struct c2gmsk_msg * thismsg;
 
 	posnext=&chain->data[chain->s_pos];
 
-	thismsg = (c2gmsk_msg*) posnext;
+	thismsg = (struct c2gmsk_msg*) posnext;
 
 	// does the message completely fit in the chain?
-	if ((chain->s_pos + thismsg->datasize + sizeof(c2gmsk_msg)) <= chain->used) {
+	if ((chain->s_pos + thismsg->datasize + sizeof(struct c2gmsk_msg)) <= chain->used) {
 
 		// set "tod" and "numelem" values
 		// only set them if the pointers do actually point somewhere
@@ -127,7 +129,7 @@ if ((chain->s_pos < chain->used) && (chain->s_numelem < chain->numelem)) {
 		}; // end if
 
 		// OK, we have a valid message
-		chain->s_pos += (sizeof(c2gmsk_msg) + thismsg->datasize);
+		chain->s_pos += (sizeof(struct c2gmsk_msg) + thismsg->datasize);
 		chain->s_numelem ++;	
 
 		// now return, pointing to next msg
@@ -147,12 +149,12 @@ return(NULL);
 
 ///////////////////////////////////////////////
 /// function msgchain search for particular type-of-data
-void * c2gmsk_msgchain_search_tod (int where, msgchain * chain, int tod, int * datasize, int * numelem) {
+void * c2gmsk_msgchain_search_tod (int where, struct c2gmsk_msgchain * chain, int tod, int * datasize, int * numelem) {
 int ret;
 int thistod;
 int thisdatasize;
 
-c2gmsk_msg * posnext;
+struct c2gmsk_msg * posnext;
 
 // sanity checking
 ret=checksign_chain(chain);
@@ -210,7 +212,7 @@ return(NULL);
 // add 1 char for terminating NULL
 
 
-char * c2gmsk_msgdecode_printbit (c2gmsk_msg * msg, char * txtbuffer, int marker) {
+char * c2gmsk_msgdecode_printbit (struct c2gmsk_msg * msg, char * txtbuffer, int marker) {
 
 // some sanity cheching
 
@@ -310,7 +312,7 @@ return(NULL);
 // return -1 on failure of sanity checks
 
 
-int c2gmsk_msgdecode_numeric (c2gmsk_msg * msg, int *data) {
+int c2gmsk_msgdecode_numeric (struct c2gmsk_msg * msg, int *data) {
 
 // same sanity checking
 // pointer to msg should point somewhere
@@ -382,7 +384,7 @@ return(-1);
 ///////// function MSG DECODE codec2
 // c2buff should point to buffer of at least 8 octets to hold c2data in all bitrates
 
-int c2gmsk_msgdecode_c2 (c2gmsk_msg * msg, unsigned char * c2buff) {
+int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff) {
 c2gmsk_msg_codec2 *msgc2;
 
 
@@ -429,7 +431,7 @@ return(-2);
 ///////// function MSG DECODE pcm48k
 
 // pcmbuff should point to buffer of at least 1920 16-bit integers (40 ms @ 48000 sampling)
-int c2gmsk_msgdecode_pcm48k (c2gmsk_msg * msg, int16_t * pcmbuff) {
+int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t * pcmbuff) {
 int size;
 c2gmsk_msg_pcm48k *msgp;
 

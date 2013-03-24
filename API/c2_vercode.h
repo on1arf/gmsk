@@ -16,6 +16,8 @@
  *      GNU General Public License for more details.
  */
 
+// Version 20130314: initial release: API c2gmsk version / bitrate control + versionid codes
+// Version 20130324: convert into .so shared library
 
 // id codes that map a version-id of c2gmsk with a specific "code".
 // this code (24 bits) is send just after the start-sync of the stream

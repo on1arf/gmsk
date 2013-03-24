@@ -1,6 +1,6 @@
 C2GMSK MODEM: API
 
-API version: 20130321 (yes, it's spring!!! :-) )
+API version: 20130314
 
 
 
@@ -9,7 +9,7 @@ The Application Programming Interface
 
 * Introduction
 
-Please find here the 20130321 release of the C2GMSK modem API.
+Please find here the 20130314 release of the C2GMSK modem API.
 
 The goal is to make the VHF/UHF modem more accessable and allow it to be used inside other applications. Possible targets for this are FreeDV, the standalone gmskmodem for embedded unix systems and TheLinkBox.
 
