@@ -2,7 +2,7 @@
 
 // defines
 // version id
-#define C2GMSK_APIVERSION 20130310
+#define C2GMSK_APIVERSION 20130321
 
 
 // signatures of internal data structures
@@ -10,22 +10,23 @@
 #define CHAIN_SIGNATURE "C2ch"
 #define ABUFF48_SIGNATURE "C2a4"
 #define ABUFF8_SIGNATURE "C2a8"
-#define PARAMS_SIGNATURE "C2pa"
+#define PARAM_SIGNATURE "C2pa" // parameters 
 
 
 // return values of functions
-#define C2GMSK_RET_HIGHEST 16
+#define C2GMSK_RET_HIGHEST 19
 char *c2gmsk_str_ret[C2GMSK_RET_HIGHEST+1];
 
 #define C2GMSK_RET_OK 0
-#define C2GMSK_RET_NOTINIT 1
-#define C2GMSK_RET_NOMEMORY 2
-#define C2GMSK_RET_NOTIMPLEMENTED 3
-#define C2GMSK_RET_SESSEXISTS 4
-#define C2GMSK_RET_CHAINEXISTS 5
-#define C2GMSK_RET_ABUFFEXISTS 6
-#define C2GMSK_RET_TOLARGE 7
-#define C2GMSK_RET_BADSTATE 8
+#define C2GMSK_RET_UNSUPPAPIVERS 1
+#define C2GMSK_RET_NOTINIT 2
+#define C2GMSK_RET_NOMEMORY 3
+#define C2GMSK_RET_NOTIMPLEMENTED 4
+#define C2GMSK_RET_SESSEXISTS 5
+#define C2GMSK_RET_CHAINEXISTS 6
+#define C2GMSK_RET_ABUFFEXISTS 7
+#define C2GMSK_RET_TOLARGE 8
+#define C2GMSK_RET_BADSTATE 9
 
 
 #define C2GMSK_RET_NOVALIDSESS 10
@@ -36,6 +37,10 @@ char *c2gmsk_str_ret[C2GMSK_RET_HIGHEST+1];
 #define C2GMSK_RET_NOVALIDPARAMS 15
 #define C2GMSK_RET_NOVALIDRETPOINT 16
 
+#define C2GMSK_RET_UNSUPPORTEDVERSIONID 17
+#define C2GMSK_RET_UNSUPPORTEDMODEMBITRATE 18
+#define C2GMSK_RET_OPERATIONDISABLED 19
+
 
 
 // Type Of Data
@@ -44,6 +49,8 @@ char *c2gmsk_str_msg[C2GMSK_MSG_HIGHEST+1];
 
 #define C2GMSK_MSG_UNDEF 0x00
 #define C2GMSK_MSG_NODATA 0x01
+#define C2GMSK_MSG_CAPABILITIES 0x02
+
 #define C2GMSK_MSG_STATECHANGE 0x10
 #define C2GMSK_MSG_CODEC2 0x20
 #define C2GMSK_MSG_PCM8K 0x21
@@ -93,6 +100,13 @@ char *c2gmsk_str_statdem[C2GMSK_STATDEM_HIGHEST+1];
 #define C2GMSK_CODEC2_FRAMESIZE_1400 7
 #define C2GMSK_CODEC2_FRAMESIZE_2400 8
 
+#define C2GMSK_MODEMBITRATE_2400 1
+#define C2GMSK_MODEMBITRATE_4800 2
+
+
+// capabilities of the API
+#define C2GMSK_CAP_C2GMSKVER 1
+#define C2GMSK_CAP_MODEMBITRATE 2
 
 // defs for msgchain_search
 #define C2GMSK_SEARCH_POSSTART 0
@@ -211,11 +225,26 @@ typedef struct {
 
 
 // parameters structure
+
+// GLOBAL parameters per c2gmsk SESSION
 // used to init parameters when creating new session
 typedef struct {
+	// the first two fields (signature) and expected API version must always be
+	// be located in the beginning of the parameter function, no matter what
+	// APIversion is used
+
 	unsigned char signature[4]; // contains signature
+	int expected_apiversion; // minimal API version
+
+	// parameters for modulation
+	int m_bitrate; // 2400 or 4800 bps ?
+	int m_version; // version of c2gmsk
+
+	// parameters for demodulation
 	int d_disableaudiolevelcheck;
-} c2gmsk_params;
+} c2gmsk_param;
+
+
 
 // 40 ms audio-buffer
 typedef struct {
@@ -231,12 +260,15 @@ typedef struct {
 	unsigned char signature[4]; // contains signature
 
 
+	// parameters for the modulator
+	int m_bitrate;
+	int m_version;
+
 	// data for modulator
 	msgchain * m_chain;
 	audiobuff40_48k m_abuff;
 	
 	int m_state;
-	int m_version;
 
 	int m_v1400_framecounter;
 
@@ -254,6 +286,8 @@ typedef struct {
 
 
 
+	// parameters for demodulator
+	int d_disableaudiolevelcheck;
 
 	// data for demodulator
 	msgchain * d_chain; 
@@ -275,7 +309,6 @@ typedef struct {
 	int32_t d_last4octets;
 	int d_syncreceived;
 	int d_inaudioinvert;
-	int d_disableaudiolevelcheck;
 	int d_bitcount;
 	int d_octetcount;
 	int d_framecount;
@@ -318,7 +351,11 @@ typedef struct {
 
 
 // supportfunctions
+
+// session support functions
 int checksign_sess(session * sessid);
+session * c2gmsk_sess_new (c2gmsk_param *param, int * ret, msgchain ** out);
+int c2gmsk_sess_destroy (session * sessid);
 
 // functions related to chains
 msgchain * c2gmskchain_new (int size, int * ret);
@@ -349,20 +386,19 @@ char * c2gmsk_printstr_avglvltest (int msg);
 char * c2gmsk_printstr_statdem (int msg);
 
 // parameter support functions
-c2gmsk_params * c2gmsk_params_init ();
+int c2gmsk_param_init (c2gmsk_param *);
+int checksign_param (c2gmsk_param * param);
 
-// session support functions
-session * c2gmsk_sess_new (c2gmsk_params *params, int * ret);
-int c2gmsk_sess_destroy (session * sessid);
 
 // API calls itself
-int c2gmsk_mod_start (session * sessid, int version, msgchain ** out);
+int c2gmsk_mod_init (session * sessid, c2gmsk_param *param);
+int c2gmsk_mod_start (session * sessid,  msgchain ** out);
 int c2gmsk_mod_voice1400 (session * sessid, unsigned char * c2dataframe, msgchain ** out);
 int c2gmsk_mod_voice1400_end (session * sessid, msgchain ** out);
 int c2gmsk_mod_audioflush (session * sessid, msgchain ** out);
 
 int c2gmsk_demod (session * sessid, int16_t  * in, msgchain ** out);
-int c2gmsk_demod_init (session * sessid);
+int c2gmsk_demod_init (session * sessid, c2gmsk_param *param);
 
 
 
@@ -374,6 +410,7 @@ char * c2gmsk_msgdecode_printbit (c2gmsk_msg * msg, char * txtbuffer, int marker
 int c2gmsk_msgdecode_numeric (c2gmsk_msg * msg, int *data);
 int c2gmsk_msgdecode_c2 (c2gmsk_msg * msg, unsigned char * c2buff);
 int c2gmsk_msgdecode_pcm48k (c2gmsk_msg * msg, int16_t * c2buff);
+
 
 // get version
 int c2gmsk_getapiversion ();

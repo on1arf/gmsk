@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 // The low-level DSP functions are largly taken from the
@@ -54,19 +54,21 @@
 #include "gmskmodemapi.h"
 
 
+// functions written below
+void write_audio_to_file(int, c2gmsk_msg *);
+
 ///////////////////////
 // application starts here
 
 int main () {
 session * sessid=NULL;
 msgchain * chain=NULL, ** pchain;
-c2gmsk_params *params;
+c2gmsk_param param;
 int16_t silence[480]; // 480 samples = 10 ms @ 48Khz samplerate
-int16_t pcmbuffer[1920];
 int tod, numsample, msgnr;
 int framecount;
 
-int fout, fin; // file out and file in 
+int f_out, f_in; // file out and file in 
 
 c2gmsk_msg * msg;
 
@@ -82,18 +84,18 @@ unsigned char inbuffer[7];
 memset(&silence,0,sizeof(silence));
 
 // open out file
-fout=open("test.raw",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+f_out=open("test.raw",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
-if (fout < 0) {
+if (f_out < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
 	exit(-1);
 }; // end if
 
 
 // open input file
-fin=open("c2in.c2",O_RDONLY);
+f_in=open("c2in.c2",O_RDONLY);
 
-if (fin < 0) {
+if (f_in < 0) {
 	fprintf(stderr,"Error: could not open file for input: %d (%s)! \n",errno,strerror(errno));
 	exit(-1);
 }; // end if
@@ -102,16 +104,27 @@ if (fin < 0) {
 pchain=&chain;
 
 
-// before creating the session, parameters need to be created
-params=c2gmsk_params_init();
-if (!params) {
-	fprintf(stderr,"Error: Could not create parameters structure! \n");
+// init parameters (signatures + default values)
+// GLOBAL PARAMETERS
+ret=c2gmsk_param_init(&param);
+if (ret != C2GMSK_RET_OK) {
+	fprintf(stderr,"Error: Could not initiate parameter structures!\n");
 	exit(-1);
 }; // end if
 
+// fill in parameter
+// global
+param.expected_apiversion=0;
+
+// modulation parameters
+param.m_version=0; // version 0 for 4800 bps = versioncode 0x27F301
+param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
+
+// demodulation parameters not filled in (we do not do any demodulation here)
+
 
 // init session
-sessid=c2gmsk_sess_new(params,&ret);
+sessid=c2gmsk_sess_new(&param,&ret,pchain);
 if (ret != C2GMSK_RET_OK) {
 	fprintf(stderr,"Error: could not create C2GMSK session: %d \n",ret);
 	exit(-1);
@@ -120,7 +133,7 @@ if (ret != C2GMSK_RET_OK) {
 
 // create 300 ms of silence ( 30 times 10 ms)
 for (loop=0; loop<30; loop++){
-	ret=write(fout,silence,sizeof(silence));
+	ret=write(f_out,silence,sizeof(silence));
 }; // end for
 
 
@@ -131,8 +144,8 @@ for (loop=0; loop<30; loop++){
 // do mod start
 // chain is returned via pointer pchain
 // chain search parameters will automatically be reinitialised
-// version = 0
-ret=c2gmsk_mod_start(sessid,0,pchain);
+// pass parameters via "param_s" structure
+ret=c2gmsk_mod_start(sessid,pchain);
 chain=*pchain;
 
 if (ret != C2GMSK_RET_OK) {
@@ -143,26 +156,16 @@ if (ret != C2GMSK_RET_OK) {
 // loop throu all messages
 // message chain is in "chain"
 // we are only interested in C2GMSK_MSG_PCM48K messages
-// datasize is returned in datasize
+// number of audio frames is returned in numsample
+// message number if returned in msgnr
 
 tod=C2GMSK_MSG_PCM48K;
 
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
 	printf("Processing message %d of start\n",msgnr);
 
-	nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
-
-	// we should have received 1920 samples
-	if (nsample < 1920) {
-		fprintf(stderr,"mod_start did not receive sufficient data: expected 1920: got %d \n",ret);
-	}; // end if
-
-	// write data
-	ret=write(fout,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
-	if (ret < 0) {
-		// write should return number of octets written
-		fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
-	}; // end if
+	// write audio to file: defined bewlo
+	write_audio_to_file(f_out, msg);
 }; // end while
 
 
@@ -171,14 +174,14 @@ while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &
 ///////////////////// MOD VOICE1400 //////////////////////////////
 //////////////////////////////////////////////////////////////
 
-ret=read(fin, inbuffer,7);
+ret=read(f_in, inbuffer,7);
 
 framecount=0;
 while (ret == 7) {
 	// chain is returned via pointer pchain
 	// chain search parameters will automatically be reinitialised
 	nsample=c2gmsk_mod_voice1400(sessid,inbuffer,pchain);
-	if (ret != C2GMSK_RET_OK) {
+	if (nsample != C2GMSK_RET_OK) {
 		fprintf(stderr,"Error: c2gmsk_mod failed: %d \n",ret);
 		exit(-1);
 	}; // end if
@@ -188,27 +191,16 @@ while (ret == 7) {
 	// loop throu all messages in chain
 	// message chain is in "chain"
 	// we are only interested in C2GMSK_MSG_PCM48K messages
-	// datasize is returned in datasize
+	// number of audio frames is returned in numsample
+	// message number if returned in msgnr
 
 	while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
 		printf("Processing message %d.%d of voice1400\n",framecount,msgnr);
 
-		nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
-
-		// we should have received 1920 samples
-		if (nsample < 1920) {
-			fprintf(stderr,"mod_voice1400 did not receive sufficient data: expected 1920: got %d \n",nsample);
-		}; // end if
-
-		// write data
-		ret=write(fout,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
-		if (ret < 0) {
-			// write should return number of octets written
-			fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
-		}; // end if
+		write_audio_to_file(f_out, msg);
 	}; // end while
 
-	ret=read(fin, inbuffer,7);
+	ret=read(f_in, inbuffer,7);
 	framecount++;
 }; // end while
 
@@ -226,24 +218,10 @@ if (ret != C2GMSK_RET_OK) {
 	exit(-1);
 }; // end if
 
-tod=C2GMSK_MSG_PCM48K;
-
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
 	printf("Processing message %d of voice1400_end\n",msgnr);
 
-	nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
-
-	// we should have received 1920 samples
-	if (nsample < 1920) {
-		fprintf(stderr,"mod_voice1400_end did not receive sufficient data: expected 1920: got %d \n",nsample);
-	}; // end if
-
-	// write data
-	ret=write(fout,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
-	if (ret < 0) {
-		// write should return number of octets written
-		fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
-	}; // end if
+	write_audio_to_file(f_out, msg);
 }; // end while
 
 
@@ -260,24 +238,10 @@ if (ret != C2GMSK_RET_OK) {
 	exit(-1);
 }; // end if
 
-tod=C2GMSK_MSG_PCM48K;
-
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
 	printf("Processing message %d of audioflush\n",msgnr);
 
-	nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
-
-	// we should have received 1920 samples
-	if (nsample < 1920) {
-		fprintf(stderr,"mod_start did not receive sufficient data: expected 1920: got %d \n",nsample);
-	}; // end if
-
-	// write data
-	ret=write(fout,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
-	if (ret < 0) {
-		// write should return number of octets written
-		fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
-	}; // end if
+	write_audio_to_file(f_out, msg);
 }; // end while
 
 
@@ -287,9 +251,36 @@ while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &
 
 // create 1000 ms of silence ( 100 times 10 ms)
 for (loop=0; loop<100; loop++){
-	ret=write(fout,silence,sizeof(silence));
+	ret=write(f_out,silence,sizeof(silence));
 }; // end for
 
-close(fout);
+close(f_out);
 return(0);
+}; // end application
+////////////////////////////////
+////////// END OF APPLICATION
+
+
+/////////////////////////////////////////////
+/// function write_to_file
+
+void write_audio_to_file(int file_out, c2gmsk_msg * msg) {
+int nsample, ret;
+int16_t pcmbuffer[1920];
+
+
+nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
+
+// we should have received 1920 samples
+if (nsample < 1920) {
+	fprintf(stderr,"mod_start did not receive sufficient data: expected 1920: got %d \n",nsample);
 }; // end if
+
+// write data
+ret=write(file_out,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
+if (ret < 0) {
+	// write should return number of octets written
+	fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
+}; // end if
+
+}; // end function 

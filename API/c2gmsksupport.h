@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 /*
@@ -25,7 +25,7 @@
 // c2gmsk API user-level support functions
 
 // functions:
-// c2gmsk_params_init
+// c2gmsk_param_init
 // c2gmsk_msgchain_search
 // c2gmsk_msgchain_search_tod
 // c2gmsk_msgdecode_printbit
@@ -34,26 +34,52 @@
 // c2gmsk_getapiversion
 
 // support functions
-c2gmsk_params * c2gmsk_params_init () {
 
-// new structure
-c2gmsk_params * params;
+///////////////////////////////////////
+// INIT GLOBAL PARAMS 
 
-// create structure
-params=malloc(sizeof(c2gmsk_params));
+///// create and initiaise parameters
+int c2gmsk_param_init (c2gmsk_param * param) {
 
-if (!params) {
-	return(NULL);
-}; // end fail
 
-// copy signature
-memcpy(params->signature,PARAMS_SIGNATURE,4);
+// do nothing if pointer = NULL
+if (param) {
+	// copy signature for global params
+	memcpy(param->signature,PARAM_SIGNATURE,4);
 
-// init all values to 0 or NULL
-params->d_disableaudiolevelcheck=0;
+	// init all values to 0 or NULL
+	// global params
+	param->expected_apiversion=0;
 
-return(params);
+	// modulation
+	// (-1 = disable modulation)
+	param->m_bitrate=-1;
+	param->m_version=-1;
+
+	// demodulation
+	// (-1 = disable demodulation)
+	param->d_disableaudiolevelcheck=-1;
+}; // end if
+
+return(C2GMSK_RET_OK);
 }; // end function c2gmsk_params_init
+
+
+///// check signature
+int checksign_param (c2gmsk_param * param) {
+// does it point somewhereN
+if (!param) {
+	return(C2GMSK_RET_NOVALIDPARAMS);
+}; // end if
+
+// check signature
+if (memcmp(param->signature,PARAM_SIGNATURE,4)) {
+	return(C2GMSK_RET_NOVALIDPARAMS);
+}; // end if
+
+return(C2GMSK_RET_OK);
+
+}; // end if
 
 
 ////////////////////////////////////////////////
@@ -312,6 +338,7 @@ switch (msg->tod) {
 		};
 	// 2 vars returned
 	case C2GMSK_MSG_STATECHANGE:
+	case C2GMSK_MSG_CAPABILITIES:
 		{
 		c2gmsk_msg_2 * msg2;
 
@@ -324,7 +351,10 @@ switch (msg->tod) {
 	// 3 vars returned
 		// (none)
 
-	// 4 vars returned
+	// 3 vars returned
+		// (none)
+
+	// 3 vars returned
 	case C2GMSK_MSG_VERSIONID:
 		{
 		c2gmsk_msg_4 * msg4;
@@ -332,11 +362,12 @@ switch (msg->tod) {
 		msg4=(c2gmsk_msg_4*) msg;
 		data[0]=msg4->data0;
 		data[1]=msg4->data1;
-		data[2]=msg4->data1;
-		data[3]=msg4->data1;
+		data[2]=msg4->data2;
+		data[3]=msg4->data3;
 
 		return(4);
 		};
+
 	// all the rest, return nothing
 	default:
 		return(0);

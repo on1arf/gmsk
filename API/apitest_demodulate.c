@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 // The low-level DSP functions are largly taken from the
@@ -58,7 +58,7 @@ int main () {
 // API structures
 session * sessid=NULL;
 msgchain * chain=NULL; msgchain ** pchain; // pointer to pointer of message chain
-c2gmsk_params *params;
+c2gmsk_param param;
 c2gmsk_msg * msg;
 
 // buffers for data
@@ -70,8 +70,16 @@ int fout, fin; // file out and file in
 
 // some local vars
 int framecount, msgcount;
-int ret;
+int ret,ret2;
 
+// vars used to extract messages from message queue
+int tod; // type of data
+int datasize; // datasize
+int data[4]; // used for numeric data
+
+
+// bitrate to  text
+char * bitrate2text[] = { "2400", "4800"};
 
 
 // open out file
@@ -96,24 +104,54 @@ pchain=&chain;
 
 
 // before creating the session, parameters need to be created
-params=c2gmsk_params_init();
-if (!params) {
-	fprintf(stderr,"Error: Could not create parameters structure! \n");
+ret=c2gmsk_param_init(&param); // no stream related parameters
+if (ret != C2GMSK_RET_OK) {
+	fprintf(stderr,"Error: Could not initialise parameter structures! \n");
 	exit(-1);
 }; // end if
 
 // fill in parameters
-params->d_disableaudiolevelcheck=1;
+param.expected_apiversion=0;
+param.d_disableaudiolevelcheck=1;
 
 
 // create gmsk session
-sessid=c2gmsk_sess_new(params,&ret);
+sessid=c2gmsk_sess_new(&param,&ret, pchain);
 
 if (ret != C2GMSK_RET_OK) {
 	fprintf(stderr,"Error: could not create C2GMSK session: %d \n",ret);
 	exit(-1);
 }; // end if
 
+// c2gmsk_sess_new returns list of supported versions/modes
+chain=*pchain;
+
+// loop throu all messages
+// message chain is in "chain"
+// we are only interested in CAPABILITIES messages
+tod=C2GMSK_MSG_CAPABILITIES;
+
+while ((msg = c2gmsk_msgchain_search(C2GMSK_SEARCH_POSCURRENT, chain, &tod, &datasize, NULL))) {
+	ret=c2gmsk_msgdecode_numeric (msg, data);
+
+	// data[0] = versionid
+	// data[1] = bitrate
+
+	if (ret == 2) {
+		// bitrate should be 1 or 2
+		if ((data[1] >= 1 ) && (data[1] <= 2)) {
+			printf("Supported Capabilities of API: Versionid %d, bitrate %s \n",data[0],bitrate2text[data[1]-1]);
+		} else {
+			printf("Supported Capabilities of API: Versionid %d, bitrate %d \n",data[0],data[1]);
+		}; // end else - if
+	} else {
+		printf("Error: Capabilities should return a message with 2 dataelements. Got %d. Skipping message \n",ret);
+	}; 
+
+}; // end while
+
+// add line
+printf("\n");
 
 //////////////////////////////////////////
 // session is created, let's get started
@@ -123,18 +161,14 @@ ret=read(fin, pcmbuffer, sizeof(pcmbuffer));
 framecount=0;
 
 while (ret == sizeof(pcmbuffer)) {
-// msg
-
-int tod; // type of data
-int datasize; // datasize
 
 	framecount++;
 
-	ret=c2gmsk_demod(sessid,pcmbuffer,pchain);
+	ret2=c2gmsk_demod(sessid,pcmbuffer,pchain);
 	chain=*pchain;
 
-	if (ret != C2GMSK_RET_OK) {
-		fprintf(stderr,"Error: c2gmsk_dmod failed: %d (%s) \n",ret,c2gmsk_printstr_ret(ret));
+	if (ret2 != C2GMSK_RET_OK) {
+		fprintf(stderr,"Error: c2gmsk_dmod failed: %d (%s) \n",ret2,c2gmsk_printstr_ret(ret2));
 		exit(-1);
 	}; // end if
 
@@ -143,8 +177,6 @@ int datasize; // datasize
 
 	// loop as long as we find messages in the queue
 	while ((msg = c2gmsk_msgchain_search(C2GMSK_SEARCH_POSCURRENT, chain, &tod, &datasize, NULL))) {
-		int ret;
-		int data[4];
 
 		// add \n before 1st message
 		if (msgcount) {
@@ -166,61 +198,67 @@ int datasize; // datasize
 		};
 
 		// is it a call that return one or more numeric vales?
-		ret=c2gmsk_msgdecode_numeric (msg, data);
+		ret2=c2gmsk_msgdecode_numeric (msg, data);
 
-		if (ret > 0) {
-			if (ret > 1) {
-				printf("type-of-data %d (%s): %d data fields:\n",tod, c2gmsk_printstr_msg(tod),ret);
+		if (ret2 > 0) {
+			if (ret2 > 1) {
+				printf("type-of-data %d (%s): %d data fields:\n",tod, c2gmsk_printstr_msg(tod),ret2);
 			} else {
 				printf("type-of-data %d (%s): 1 data field:\n", tod, c2gmsk_printstr_msg(tod));
 			}; 
 
 
-			if (ret <= 4) {
+			if (ret2 <= 4) {
 				// print all data
 				int l;
 
-				// 1st data element
-				printf("%d",data[0]);
+				if (tod == C2GMSK_MSG_VERSIONID) {
+					printf("%08X",data[0]);
 
-				// 2nd up to 4th data element
-				for (l=2; l<=ret; l++) {
-					printf(", %d",data[l-1]);
-				}; // end for
-				printf("\n");
+					for (l=2; l<=ret2; l++) {
+						printf(", %08X",data[l-1]);
+					}; // end for
+					printf("\n");
+				} else {
+					printf("%d",data[0]);
+					for (l=2; l<=ret2; l++) {
+						printf(", %d",data[l-1]);
+					}; // end for
+					printf("\n");
+				}; // end else - if
 			} else {
 				fprintf(stderr,"Error: number of vars returned by msgdecode - numeric not supported!\n");
 			}; // end switch
 
 			continue;
-		} else if (ret < 0) {
+		} else if (ret2 < 0) {
 			fprintf(stderr,"Error: message-decode numeric fails on sanity check!\n");
 			continue;
 		}; // end else - if
 
 
 		// codec2?
-		ret=c2gmsk_msgdecode_c2(msg, c2buff);
+		ret2=c2gmsk_msgdecode_c2(msg, c2buff);
 
-		if (ret > 0) {
+		if (ret2 > 0) {
 			// codec2, check version
 
-			if (ret != C2GMSK_CODEC2_1400) {
-				fprintf(stderr,"Error: unsupported codec2 bitrate %d\n",ret);
+			if (ret2 != C2GMSK_CODEC2_1400) {
+				fprintf(stderr,"Error: unsupported codec2 bitrate %d\n",ret2);
 				continue;
 			};
 
 			printf("Writing codec2 frame \n");
 			// write data in file
-			ret=write(fout,c2buff,C2GMSK_CODEC2_FRAMESIZE_1400);
+			ret2=write(fout,c2buff,C2GMSK_CODEC2_FRAMESIZE_1400);
 
-			if (ret < 0) {
+			if (ret2 < 0) {
 				// write should return number of octets written
 				fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
 			}; // end if
 
 			continue;
-		} else if (ret < 0) {
+		} else if (ret2 < 0) {
 			fprintf(stderr,"Error: message-decode codec2 fails on sanity check!\n");
 			continue;
 		}; ; // end if

@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 /*
@@ -53,14 +53,27 @@ return(C2GMSK_RET_OK);
 
 /////////////////////////////////////
 // support functions: new and destroy
-session * c2gmsk_sess_new (c2gmsk_params *params, int * ret) {
+session * c2gmsk_sess_new (c2gmsk_param * param , int * ret, msgchain ** out) {
 session *newsessid;
 int ret2;
-int loop;
 
 // check signature
-if (memcmp(params->signature,PARAMS_SIGNATURE,4)) {
-	*ret=C2GMSK_RET_NOVALIDPARAMS;
+ret2=checksign_param(param);
+if (ret2 != C2GMSK_RET_OK) {
+	*ret=ret2;
+	return(NULL);
+}; // end if
+
+// sanity checking: "out" pointer, does it point somewhere?
+if (!out) {
+	*ret=C2GMSK_RET_NOVALIDRETPOINT;
+	return(NULL);
+}; // end if
+
+// check exptected API version
+// if higher then current, we have a problem
+if (param->expected_apiversion > C2GMSK_APIVERSION) {
+	*ret=C2GMSK_RET_UNSUPPAPIVERS;
 	return(NULL);
 }; // end if
 
@@ -102,75 +115,36 @@ if (ret2 != C2GMSK_RET_OK) {
 // copy signature for 48kbps audio
 memcpy(newsessid->m_abuff.signature,ABUFF48_SIGNATURE,4);
 
-// other data
-newsessid->d_state=0;
-newsessid->d_audioinvert=0;
-
-newsessid->d_printbitcount=0;
-newsessid->d_printbitcount_v=0;
 
 
-// audio level check:
-newsessid->d_audiolevelindex=0;
-for (loop=0; loop < 32; loop++) {
-	newsessid->d_audioleveltable[loop]=0;
-}; // end for
-// disable audio level check, copy from paramlist
-newsessid->d_disableaudiolevelcheck=params->d_disableaudiolevelcheck;
-
-// maxaudiolevel check disabled (see notes in gmskmodemapi.h/
-// newsessid>d_maxaudiolevelvalid=0;
-//	int d_maxaudiolevelvalid_total;
-//	int d_maxaudiolevelvalid_numbersample;
-//	int d_countnoiseframe;
-//	int d_framesnoise;
-
-// data for demod
-newsessid->d_last2octets=0;
-newsessid->d_last4octets=0;
-newsessid->d_syncreceived=0;
-newsessid->d_inaudioinvert=0;
-newsessid->d_bitcount=0;
-newsessid->d_octetcount=0;
-newsessid->d_framecount=0;
-newsessid->d_missedsync=0;
-newsessid->d_syncfound=0;
-newsessid->d_endfound=0;
-newsessid->d_marker=' ';
-
-memset(newsessid->d_codec2frame,0,7);
-memset(newsessid->d_codec2versionid,0,3);
-memset(newsessid->d_codec2inframe,0,24);
-
-memset(newsessid->d_printbit,' ',96);
-newsessid->d_printbitcount=0;
-
-memset(newsessid->d_printbit_v,' ',96);
-newsessid->d_printbitcount_v=0;
-
-
-// vars for DSP filters
-// for "firfilter_modulate"
-newsessid->md_filt_init=1;
-
-// for "demodulate"
-newsessid->dd_dem_init=1;
-
-// for "firfilter_demodulate"
-newsessid->dd_filt_init=1;
-
-
-// init debug messages
-c2gmsk_printstr_init();
-
-
-// init demodulator
-ret2=c2gmsk_demod_init(newsessid);
+// init modulator
+ret2=c2gmsk_mod_init(newsessid, param);
 if (ret2 != C2GMSK_RET_OK) {
 	*ret=ret2;
 	return(NULL);
 }; // end if
 
+
+// init demodulator
+// note: init demod will also call "queue_debug_bit_init" and "c2gmsk_printstr_init"
+ret2=c2gmsk_demod_init(newsessid, param);
+if (ret2 != C2GMSK_RET_OK) {
+	*ret=ret2;
+	return(NULL);
+}; // end if
+
+
+// return capabilities
+// we are using the msgchain of the modulator for this
+ret2=queue_m_msg_2(newsessid,C2GMSK_MSG_CAPABILITIES, 0, C2GMSK_MODEMBITRATE_4800); // we support versionid 0 / bitrate 4800
+if (ret2 != C2GMSK_RET_OK) {
+	*ret=ret2;
+	return(NULL);
+}; // end if
+
+
+// return message queue
+*out=newsessid->m_chain;
 
 // done
 *ret=C2GMSK_RET_OK;

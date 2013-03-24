@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 /*
@@ -59,6 +59,9 @@ c2gmsk_str_ret[C2GMSK_RET_NOVALIDDATA]="Not a valid data structure";
 c2gmsk_str_ret[C2GMSK_RET_NOVALIDAUDIO]="Not a valid inputaudio structure";
 c2gmsk_str_ret[C2GMSK_RET_NOVALIDPARAMS]="Not a valid parameter structure";
 c2gmsk_str_ret[C2GMSK_RET_NOVALIDRETPOINT]="Not a valid messagechain return pointer";
+c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDVERSIONID]="Unsupported c2gmsk version id";
+c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDMODEMBITRATE]="Unsupported modem version id";
+c2gmsk_str_ret[C2GMSK_RET_OPERATIONDISABLED]="Operation Disabled";
 
 
 // type of data
@@ -68,6 +71,7 @@ for (loop=0; loop <= C2GMSK_MSG_HIGHEST; loop++) {
 
 c2gmsk_str_msg[C2GMSK_MSG_UNDEF]="undefined";
 c2gmsk_str_msg[C2GMSK_MSG_NODATA]="no data";
+c2gmsk_str_msg[C2GMSK_MSG_CAPABILITIES]="capabilities";
 c2gmsk_str_msg[C2GMSK_MSG_STATECHANGE]="change of state";
 c2gmsk_str_msg[C2GMSK_MSG_CODEC2]="codec2 voice data";
 c2gmsk_str_msg[C2GMSK_MSG_PCM8K]="pcm audio at 8khz";

@@ -1,7 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x111111): 4800 bps, 1/3 repetition code FEC
+// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
 
 
 // The low-level DSP functions are largly taken from the
@@ -28,7 +28,8 @@
 // main functions of API for modulation and demodulation
 
 // Release information
-// version 20130310 initial release
+// version 20130310: initial release
+// version 20130314: sess_new parameters via structure, c2gmskversionid via versionid-table, 
 
 
 //////////////////////
@@ -82,14 +83,16 @@
 // functions for pattern matching
 #include "countdiff.h"
 
-// functions dealing internal structure and queing functions
+// table of c2gmsk versionid-mapping
+#include "c2_vercode.h"
 
+// functions dealing internal structure and queing functions
+#include "c2gmskdebugmsg.h" // support functions for debug message queuing
 #include "c2gmsksess.h" // support functions for sessions ("new" and "destroy")
 #include "c2gmskchain.h" // functions for memory chains
 #include "c2gmskabuff.h" // functions for 40ms audio buffers
 #include "c2gmskmodulate.h" // functions for audio buffers gmsk modulation
 #include "c2gmskprintbit.h" // support functions for printbit functions
-#include "c2gmskdebugmsg.h" // support functions for debug message queuing
 #include "c2gmskstr.h" // text version of defines
 
 #include "c2gmsksupport.h" // C2GMSK user-level API SUPPORT FUNCTIONS
@@ -97,13 +100,14 @@
 
 #include "c2_interleave.h" // interleaving matrix for 1400 bps voice
 #include "c2_scramble.h" // scramble matrix for 1400 bps voice
-#include "c2_fec13.h" // fec1/3 repetition code
+#include "c2_fec.h" // fec1/3 repetition code
 
 
 
 
 ///////////////////////////////////////////////
 //// MODULATION CHAIN:
+//// c2gmsk_mod_init
 //// c2gmsk_mod_start
 //// c2gmsk_mod_voice1400
 //// c2gmsk_mod_voice1400_end
@@ -290,12 +294,61 @@ return(C2GMSK_RET_OK);
 ///////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
 
+int c2gmsk_mod_init (session * sessid, c2gmsk_param * param) {
+int ret;
 
-int c2gmsk_mod_start (session *sessid, int version, msgchain **out) {
+// sanity checks
+ret=checksign_sess(sessid);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
+
+ret=checksign_param (param);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
+
+
+
+// version and mode check:
+
+// As c2gmsk_mod_init is called from sess_new, is it not said that modulation
+// is actually used.
+// In this part of the code, the version/mode check is only done if either is enabled
+// the check if the modulation is enabled is done in "mod_start"
+
+if ((param->m_version >= 0) || (param->m_bitrate >= 0)) {
+	// check version, currently only version 0 is supported
+	// version 0: versionid = 0x27f301
+	if (param->m_version != 0) {
+		return(C2GMSK_RET_UNSUPPORTEDVERSIONID);
+	}; // end if
+
+	// currenly, only 4800 bps is supported
+	if (param->m_bitrate != C2GMSK_MODEMBITRATE_4800) {
+		return(C2GMSK_RET_UNSUPPORTEDMODEMBITRATE);
+	}; // end if
+}; // end if
+
+// copy parameters from param to session vars
+sessid->m_version=param->m_version;
+sessid->m_bitrate=param->m_bitrate;
+
+// init all other modulator-related vars
+sessid->m_state=0;
+sessid->m_v1400_framecounter=0;
+sessid->md_filt_init=1;
+
+
+// done
+return(C2GMSK_RET_OK);
+}; // end function c2gmsk_mod_init
+
+
+int c2gmsk_mod_start (session *sessid, msgchain **out) {
 // MODULATE CHAIN. START stream
 
 // local data
-int loop;
 int ret;
 
 unsigned char versionid[3];
@@ -311,15 +364,6 @@ if (!out) {
 }; // end if
 
 
-// reinit chain ... this will also reinit the search parameters for this chain
-ret=c2gmskchain_reinit(sessid->m_chain, C2GMSKCHAIN_DEFAULTSIZE_MOD);
-
-if (ret != C2GMSK_RET_OK) {
-	// something went wrong, exit
-	return(ret);
-}; // end if
-
-
 
 // check status, "start modulate" should only be called in state = 0
 if (sessid->m_state != 0) {
@@ -327,11 +371,19 @@ if (sessid->m_state != 0) {
 }; // end if
 
 
-// check version, currently only version 0 is supported
-// version 0: versionid = 0x111111
-if (version != 0) {
-	return(C2GMSK_MSG_UNKNOWNVERSIONID);
+
+// check if modulation is enabled
+if ((sessid->m_version < 0) || (sessid->m_bitrate < 0)) {
+	return(C2GMSK_RET_OPERATIONDISABLED);
 }; // end if
+
+// reinit chain ... this will also reinit the search parameters for this chain
+ret=c2gmskchain_reinit(sessid->m_chain, C2GMSKCHAIN_DEFAULTSIZE_MOD);
+if (ret != C2GMSK_RET_OK) {
+	// something went wrong, exit
+	return(ret);
+}; // end if
+
 
 // set status to 1 and queue "change of status" message
 sessid->m_state=1;
@@ -350,15 +402,18 @@ if (ret != C2GMSK_RET_OK) {
 	return (ret);
 }; // end if
 
-// send version (0x11) 3 times, NON inverted
-versionid[0]=0x11; versionid[1]=0x11; versionid[2]=0x11;
+// send versionid (0, code 0x27f301), NON inverted
+// copy octet per octet to be endian-independant
 
-for (loop=0; loop < 3; loop++) {
-	ret=c2gmskabuff48k_modulatebits(sessid, &versionid[loop], 8, NOORDERINVERT);
+versionid[0]=(char)(c2gmsk_idcode_4800[sessid->m_version] & 0xff);
+versionid[1]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff00) >> 8);
+versionid[2]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff0000) >> 16);
 
-	if (ret != C2GMSK_RET_OK) {
-		return(ret);
-	}; // end if
+// send 24 bits
+ret=c2gmskabuff48k_modulatebits(sessid, versionid, 24, NOORDERINVERT);
+
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
 }; // end if
 
 
@@ -394,8 +449,9 @@ return(C2GMSK_RET_OK);
 
 ///////////////
 // function c2gmsk demodulation init
-int c2gmsk_demod_init (session * sessid) {
+int c2gmsk_demod_init (session * sessid, c2gmsk_param * param) {
 int ret;
+int loop;
 	
 // sanity checks
 ret=checksign_sess(sessid);
@@ -403,14 +459,79 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+ret=checksign_param(param);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
+
+// node "demod_init" is called from sess_new, but as nothing says that demodulation
+// will be needed, the "disablelevelcheck" is only checked if demodulation is enabled
+// (i.e. all needed parameters are filled in, i.e. values 0 or higher)
+
+// copy parameters to session
+sessid->d_disableaudiolevelcheck=param->d_disableaudiolevelcheck;
+
+
 
 // reinit vars
 sessid->d_state=0;
+sessid->d_audioinvert=0;
+
+sessid->d_printbitcount=0;
+sessid->d_printbitcount_v=0;
+
+// audio level check
+sessid->d_audiolevelindex=0;
+for (loop=0; loop < 32; loop++) {
+	sessid->d_audioleveltable[loop]=0;
+}; // end for
+
+// maxaudiolevel check disabled (see notes in gmskmodemapi.h/
+// newsessid>d_maxaudiolevelvalid=0;
+//	int d_maxaudiolevelvalid_total;
+//	int d_maxaudiolevelvalid_numbersample;
+//	int d_countnoiseframe;
+//	int d_framesnoise;
+
+// data for demod
+sessid->d_last2octets=0;
+sessid->d_last4octets=0;
+sessid->d_syncreceived=0;
+sessid->d_inaudioinvert=0;
+sessid->d_bitcount=0;
+sessid->d_octetcount=0;
+sessid->d_framecount=0;
+sessid->d_missedsync=0;
+sessid->d_syncfound=0;
+sessid->d_endfound=0;
+sessid->d_marker=' ';
+
+memset(sessid->d_codec2frame,0,7);
+memset(sessid->d_codec2versionid,0,3);
+memset(sessid->d_codec2inframe,0,24);
+
+memset(sessid->d_printbit,' ',96);
+sessid->d_printbitcount=0;
+
+memset(sessid->d_printbit_v,' ',96);
+sessid->d_printbitcount_v=0;
+
+
+// vars for DSP filters
+// for "demodulate"
+sessid->dd_dem_init=1;
+
+// for "firfilter_demodulate"
+sessid->dd_filt_init=1;
 
 ret=queue_debug_bit_init(sessid);
 if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
+
+// init debug messages
+c2gmsk_printstr_init();
+
 
 return(C2GMSK_RET_OK);
 }; // end function c2gmsk demodulation init
@@ -444,6 +565,12 @@ if (!out) {
 	return(C2GMSK_RET_NOVALIDRETPOINT);
 }; // end if
 
+
+// check if demodulation is enabled, i.e. if all vars are filled in (value >= 0)
+if (sessid->d_disableaudiolevelcheck < 0) {
+	// parameter not filled in, demodulation is disabled
+	return(C2GMSK_RET_OPERATIONDISABLED);
+}; // end if
 
 // reinit chain 
 ret=c2gmskchain_reinit(sessid->d_chain, C2GMSKCHAIN_DEFAULTSIZE_MOD);
@@ -759,6 +886,8 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 	if (sessid->d_state == 20) {
 		// state 20: receive version id
 		unsigned char thisversionid;
+		unsigned int versionidreceived;
+		int mindistance;
 
 		ret=queue_debug_bit(sessid,bit);
 
@@ -787,18 +916,27 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			continue;
 		}; // end if
 
-
 		// all 24 bits received.
 		// invert values if audio is inverted
 		if (sessid->d_inaudioinvert) {
 			sessid->d_codec2versionid[0] ^= 0xff; sessid->d_codec2versionid[1] ^= 0xff; sessid->d_codec2versionid[2] ^= 0xff;
 		}; // end if
 
-		// apply 1/3 FEC ("best of 3" FEC decoding on versionid fields)
-		fec13decode_8bit(sessid->d_codec2versionid[0],sessid->d_codec2versionid[1],sessid->d_codec2versionid[2],&thisversionid);
+		// version id received, copy octet per octet to be architecture independant
+		versionidreceived=sessid->d_codec2versionid[0]+ (sessid->d_codec2versionid[1]<<8)+(sessid->d_codec2versionid[2]<<16);
 
-		// send debug message 
-		ret=queue_d_msg_4(sessid, C2GMSK_MSG_VERSIONID, thisversionid, sessid->d_codec2versionid[0],sessid->d_codec2versionid[1],sessid->d_codec2versionid[2]);
+		// search for match of received versionid in table
+		// we assume that a match with a distance of 2 or less is good enough and there is no reason to search further afterwards
+		// look for 24 bits
+
+		// min distance is send as pointer as it also returns the distance between the assumed-found id
+		mindistance=3; // minimal distance requisted
+		thisversionid=findbestmatch(versionidreceived, c2gmsk_idcode_4800, 16, 0xffffff, &mindistance);
+		// mindistance now contains minimum distance found
+
+		
+		// send debug message: 4 elements: found versionid, receivedversionid, code of selected versionid, distance
+		ret=queue_d_msg_4(sessid, C2GMSK_MSG_VERSIONID, thisversionid, versionidreceived, c2gmsk_idcode_4800[thisversionid],mindistance);
 		if (ret != C2GMSK_RET_OK) {
 			return(ret);
 		}; // end if
@@ -806,7 +944,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 		// check version
 		// currently only versionid "0x11" is accepted (speed "1", mode "1");
-		if (thisversionid != 0x11) {
+		if (thisversionid != 0) {
 			// unknown version id
 			ret=queue_d_msg_0(sessid, C2GMSK_MSG_UNKNOWNVERSIONID);
 
