@@ -11,6 +11,9 @@
  *      GNU General Public License for more details.
  */
 
+// version 20121222: initial release
+// version 20130404: added halfduplex support
+
 
 
 
@@ -55,7 +58,6 @@ while (!stop) {
 			// ON to OFF
 			fprintf(stderr,"audio is OFF! \n");
 			pglobal->transmit=0;
-
 		} else {
 			// OFF to ON
 			fprintf(stderr,"audio is ON! \n");

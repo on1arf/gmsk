@@ -62,8 +62,11 @@ struct c2gmsk_msgchain * c2gmsk_chain=NULL,  ** c2gmsk_pchain; // pointer to poi
 struct c2gmsk_msg * c2gmsk_msg;
 int tod; // type of data
 int datasize;
-int c2gmsk_msg_data[2];
+int c2gmsk_msg_data[4];
 
+char txtline[203]; // text line for "printbit". Should normally by
+			// up to 192, add 3 for "space + marker" and terminating null, add
+			// 8 for headroom for PLL syncing-errors
 
 
 ////////////////////////////////////////////////////////////////////////////
@@ -263,6 +266,10 @@ while (FOREVER) {
 				exit(-1);
 			}; // end if
 
+			if (pglobal->verboselevel >= 1) {
+				fprintf(stderr,"DEMOD: change of state: was %d now %d \n",c2gmsk_msg_data[0], c2gmsk_msg_data[1]);
+			}; // end if
+
 			// start of stream?
 			if ((c2gmsk_msg_data[0] < 22) && (c2gmsk_msg_data[1] >= 22)) {
 
@@ -307,9 +314,13 @@ while (FOREVER) {
 			// voice packet. Copy data
 			ret2=c2gmsk_msgdecode_c2(c2gmsk_msg,codec2frame);
 
-			if ((ret2 != 7) && (ret2  != 8)) {
-				fprintf(stderr,"Error: audioin_demod_netout, c2gmsk_msgdecode should return 7 or 8, got %d\n",ret2);
+			if (ret2 != C2GMSK_CODEC2_1400) {
+				fprintf(stderr,"Error: audioin_demod_netout, c2gmsk_msgdecode should return version 2 (C2GMSK_CODEC2_1400), got %d\n",ret2);
 				continue;
+			}; // end if
+
+			if (pglobal->verboselevel >= 3) {
+				printf("DEMOD: codec2 voice data: %02X%02X%02X%02X%02X%02X%02X\n",codec2frame[0],codec2frame[1],codec2frame[2],codec2frame[3],codec2frame[4],codec2frame[5],codec2frame[6]);
 			}; // end if
 
 			ret=sendto(udpsd,&c2_voice,C2ENCAP_SIZE_VOICE1400, 0, sendto_aiaddr, sendto_sizeaiaddr);
@@ -323,7 +334,156 @@ while (FOREVER) {
 			continue;
 		}; // end if
 
-		// any other TOD, just ignore
+
+		// all other messages are just dumped without further processing
+
+		// PRINTBIT messages
+		if (tod == C2GMSK_PRINTBIT_MOD) {
+			if (pglobal->dumpstream >= 1) {
+				printf("DEMOD: bitdump (demodulated): %s\n",c2gmsk_msgdecode_printbit(c2gmsk_msg,txtline,1));
+			}; // end if
+			continue;
+		}; // end if
+
+		if (tod == C2GMSK_PRINTBIT_ALL) {
+			if (pglobal->dumpstream >= 2) {
+				printf("DEMOD: bitdump (all): %s\n",c2gmsk_msgdecode_printbit(c2gmsk_msg,txtline,1));
+			}; // end if
+			continue;
+		}; // end if
+
+
+
+		// no data
+		if (tod == C2GMSK_MSG_NODATA) {
+			if (pglobal->verboselevel >= 2) {
+				printf("DEMOD: received NODATA message.\n");
+			}; // end if
+			continue;
+		}; // end if
+
+		// FEC stats?
+		if (tod == C2GMSK_MSG_FECSTATS) {
+			ret2=c2gmsk_msgdecode_numeric(c2gmsk_msg, c2gmsk_msg_data);
+
+			// fecstats is one number:
+			if (ret2 != 1)	{
+				fprintf(stderr,"Error: MSG STATECHANGE should return one parameter. Got %d \n",ret2);
+				exit(-1);
+			}; // end if
+
+			if (pglobal->verboselevel >= 2) {
+				printf("DEMOD: FECSTATS: %04d\n", c2gmsk_msg_data[0]);
+			}; // end if
+
+			continue;
+		}; // end if
+
+		// average audio level
+		if (tod == C2GMSK_MSG_AUDIOAVGLEVEL) {
+			if (pglobal->dumpaverage) {
+				ret2=c2gmsk_msgdecode_numeric(c2gmsk_msg, c2gmsk_msg_data);
+
+				// average audio level is one value
+				if (ret2 != 1)	{
+					fprintf(stderr,"Error: MSG AUDIOAVGLEVEL should return one parameters. Got %d \n",ret2);
+					exit(-1);
+				}; // end if
+
+				printf("DEMOD: Average audio level: %d\n",c2gmsk_msg_data[0]);
+			}; // end if
+			continue;
+		}; // end if
+
+		// average audio level test: result
+		if (tod == C2GMSK_MSG_AUDIOAVGLVLTEST) {
+			if (pglobal->verboselevel >= 2) {
+				ret2=c2gmsk_msgdecode_numeric(c2gmsk_msg, c2gmsk_msg_data);
+
+				// audio level test-result returns two values
+				if (ret2 != 2)	{
+					fprintf(stderr,"Error: MSG AUDIOAVGLEVEL should return one parameters. Got %d \n",ret2);
+					exit(-1);
+				}; // end if
+
+				if (c2gmsk_msg_data[0] == C2GMSK_AUDIOAVGLVLTEST_OK) {
+					printf("DEMOD: Audio average-level test returns OK. (max level %d)\n",c2gmsk_msg_data[1]);
+				} else if (c2gmsk_msg_data[0] == C2GMSK_AUDIOAVGLVLTEST_TOLOW) {
+					printf("DEMOD: Audio average-level test returns TOLOW. (max level %d)\n",c2gmsk_msg_data[1]);
+				} else if (c2gmsk_msg_data[0] == C2GMSK_AUDIOAVGLVLTEST_CANCELED) {
+					printf("DEMOD: Audio average-level test not done (not enough data)\n");
+				} else {
+					fprintf(stderr,"Error DEMOD: Audio average-level returns invalid data: %d %d\n",c2gmsk_msg_data[0],c2gmsk_msg_data[1]);
+				}; // end if
+			}; // end if
+			continue;
+		}; // end if
+
+		// input audio invert
+		if (tod == C2GMSK_MSG_INAUDIOINVERT) {
+			if (pglobal->verboselevel >= 2) {
+				ret2=c2gmsk_msgdecode_numeric(c2gmsk_msg, c2gmsk_msg_data);
+
+				// input audio invert returns one value
+				if (ret2 != 1)	{
+					fprintf(stderr,"Error: MSG INAUDIOINVERT should return one parameters. Got %d \n",ret2);
+					exit(-1);
+				}; // end if
+
+				printf("DEMOD: Input audio-invert flag: %d\n",c2gmsk_msg_data[0]);
+			}; // end if
+			continue;
+		}; // end if
+
+		// version id
+		if (tod == C2GMSK_MSG_VERSIONID) {
+			if (pglobal->verboselevel >= 2) {
+				ret2=c2gmsk_msgdecode_numeric(c2gmsk_msg, c2gmsk_msg_data);
+
+				// input audio invert returns one value
+				if (ret2 != 4)	{
+					fprintf(stderr,"Error: MSG VERSIONID should return four parameters. Got %d \n",ret2);
+					exit(-1);
+				}; // end if
+
+				printf("DEMOD: c2gmsk version id: %d (received code: %04X, selected code: %04X, minimal distance: %d\n",c2gmsk_msg_data[0],c2gmsk_msg_data[1],c2gmsk_msg_data[2],c2gmsk_msg_data[3]);
+			}; // end if
+			continue;
+		}; // end if
+
+
+		// stream end messages
+		if (tod == C2GMSK_MSG_UNKNOWNVERSIONID) {
+			if (pglobal->verboselevel >= 2) {
+				printf("DEMOD: Stream terminated due to UNKNOWN/UNSUPPORTED VERSIONID.\n");
+			}; // end if
+			continue;
+		}; // end if
+
+		if (tod == C2GMSK_MSG_END_NORMAL) {
+			if (pglobal->verboselevel >= 2) {
+				printf("DEMOD: Stream ended (end-of-stream received).\n");
+			}; // end if
+			continue;
+		}; // end if
+
+		if (tod == C2GMSK_MSG_END_TOMANYMISSEDSYNC) {
+			if (pglobal->verboselevel >= 2) {
+				printf("DEMOD: Stream terminated due to TO MANY MISSED SYNC.\n");
+			}; // end if
+			continue;
+		}; // end if
+
+		// message we should not receive here
+
+		// is it a known message?
+		if (c2gmsk_printstr_msg(tod)) {
+			fprintf(stderr,"Error DEMOD: received unexpected message (should not happen): %s\n",c2gmsk_printstr_msg(tod));
+			continue;
+		}; // end if
+
+		// unknown message
+		fprintf(stderr,"Error DEMOD: received unknown message (should not happen): %d\n",tod);
 		continue;
 	}; // end while (message loop)
 

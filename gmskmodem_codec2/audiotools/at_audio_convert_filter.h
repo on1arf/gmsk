@@ -5,7 +5,24 @@
 // distributed under term of the GNU lesser General Public License version 2.1
  
 // Used by Kristoff Bonne ON1ARF for the "audiotool" application
-// part of the "c_gmskmodem" package
+// part of the "c2_gmskmodem" package
+
+/*
+ *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
+ *
+ *      This program is free software; you can redistribute it and/or modify
+ *      it under the terms of the GNU General Public License as published by
+ *      the Free Software Foundation; version 2 of the License.
+ *
+ *      This program is distributed in the hope that it will be useful,
+ *      but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *      GNU General Public License for more details.
+ */
+
+// version 20121222: initial release
+// version 20130404: added halfduplex support
+
 
 /* Generate using fir1(47,1/6) in Octave */
 const float fdmdv_os_filter[]= {

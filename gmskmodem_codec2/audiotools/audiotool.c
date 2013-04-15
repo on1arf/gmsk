@@ -7,6 +7,7 @@
 // in UDP socket if PTT is switched on (keyin or GPIO)
 
 // version 20121222: initial release
+// version 20130404: added half duplex support
 
 /*
  *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
@@ -26,7 +27,10 @@
 
 //////////////////// CONFIGURATION: CHANGE BELOW 
 #define MINBUFF 5
-#define NUMBUFF 8
+#define NUMBUFF 30
+
+// change to 1 for strict c2encap streaming protocol checking
+#define C2ENCAP_STRICT 0
 
 //////////////////// END
 //////////////////// DO NOT CHANGE ANYTHING BELOW UNLESS YOU KNOW WHAT
@@ -106,6 +110,7 @@ typedef struct {
 
 	// portaudio parameters for input and output
 	PaStreamParameters outputParameters, inputParameters;
+	int halfduplex;
 
 	// CLI parameters
 	int ipv4only;
@@ -151,22 +156,35 @@ globaldatastr global;
 #include "at_ptt_gpio.h"
 #include "at_ptt_keyin.h"
 
+
+
+// set "c2encap strict" define to 0 if not defined
+#ifndef C2ENCAP_STRICT
+	#define C2ENCAP_STRICT 0
+#endif
+
+/////////////////////////////
+// MAIN APPLICATION
+//////////////
 int main (int argc, char ** argv) {
-
-
 // counting number of time the callback function is called per second
 int callback_errorcount, callback_thiscount, callback_lastcount;
 
 // other vars
 int numBytes;
 int loop;
-int argcount;
 
 PaStream * stream;
 PaError pa_ret;
 
 // "audio out" posix thread
 pthread_t thr_net_receive, thr_net_send, thr_ptt;
+
+// portaudio callback function, depends if full or half duplex
+//int * callback_funct();
+//int * (const void *, long unsigned, const struct PaStreamCallbackTimeInfo *, PaStreamCallbackFlags, void*) callback_funct();
+int (callback_funct(const void *, void *, long unsigned, const struct PaStreamCallbackTimeInfo *, PaStreamCallbackFlags, void*));
+
 
 // init data
 global.inputParameters.channelCount=-1;
@@ -177,8 +195,6 @@ global.callbackcount=0;
 global.c_ptr_write=1;
 global.c_ptr_read=0;
 
-global.exact=0;
-
 global.p_ptr_write=1;
 global.p_ptr_read=0;
 
@@ -188,6 +204,7 @@ global.ipv4only=0;
 global.ipv6only=0;
 global.force_stereo_capt=0;
 global.force_stereo_play=0;
+global.halfduplex=0;
 global.c_ipaddr=NULL;
 global.c_udpport=-1;
 global.p_udpport=-1;
@@ -197,7 +214,6 @@ global.ptt=-2; // -2 = not-set
 global.pttinvert=0;
 global.verbose=0;
 
-argcount=0;
 for (loop=1; loop < argc; loop++) {
 	// part 1: options
 	if (strcmp(argv[loop],"-v") == 0) {
@@ -209,15 +225,22 @@ for (loop=1; loop < argc; loop++) {
 	} else if (strcmp(argv[loop],"-6") == 0) {
 		global.ipv6only=1;
 		continue; // go to next argument
-	} else if (strcmp(argv[loop],"-sc") == 0) {
-		global.force_stereo_capt=1;
+	} else if (strcmp(argv[loop],"-forcestereo") == 0) {
+		if (loop+1 < argc) {
+			loop++;
+			if ((strcmp(argv[loop],"r") == 0) || (strcmp(argv[loop],"R") == 0)) {
+				global.force_stereo_play=0; global.force_stereo_capt=1;
+			} else if ((strcmp(argv[loop],"s") == 0) || (strcmp(argv[loop],"S") == 0)) {
+				global.force_stereo_play=1; global.force_stereo_capt=0;
+			} else if ((strcmp(argv[loop],"b") == 0) || (strcmp(argv[loop],"B") == 0)) {
+				global.force_stereo_play=1; global.force_stereo_capt=1;
+			}; // end elsif - elsif - if
+		}; // end if
 		continue; // go to next argument
-	} else if (strcmp(argv[loop],"-sp") == 0) {
-		global.force_stereo_play=1;
-		continue; // go to next argument
-	} else if (strcmp(argv[loop],"-pi") == 0) {
+	} else if (strcmp(argv[loop],"-halfduplex") == 0) {
+		global.halfduplex=1;
+	} else if (strcmp(argv[loop],"-pttinvert") == 0) {
 		global.pttinvert=1;
-		continue; // go to next argument
 	} else if (strcmp(argv[loop],"-key") == 0) {
 		// user PTT is read via pressing enter
 		if (global.ptt >= 0) {
@@ -240,68 +263,42 @@ for (loop=1; loop < argc; loop++) {
 			global.ptt=atoi(argv[loop]); // ptt=gpio port number
 		}; // end if
 		continue; // go to next argument
-	}; // end elsif - ... - if (options)
-
-	// part 2: other CLI parameters (identifier is dependant on position of parameter)
-	if (argcount == 0) {
-		// destination IP-address (audio capture)
-		global.c_ipaddr=argv[loop]; 
-
-		// increase argument counter
-		argcount++;
-		continue; // go to next argument
-	} else if (argcount == 1) {
-		// argument 1 is destination UDP port (audio capture)
-		global.c_udpport=atoi(argv[loop]);
-
-		// increase argument counter
-		argcount++;
-		continue; // go to next argument
-	} else if (argcount == 2) {
-		// argument 2 is listening UDP port (audio playback)
-		global.p_udpport=atoi(argv[loop]);
-
-		// increase argument counter
-		argcount++;
-		continue; // go to next argument
-	} else if (argcount == 3) {
-		// argument 3 (if present) is audio device name
-		global.devicename=argv[loop];
-
-		// increase argument counter
-		argcount++;
-		continue; // go to next argument
-	} else if (argcount == 4) {
-		// argument 4 (if present) should be "exact" statement
-		if (strcmp(argv[loop],"exact")==0) {
-			global.exact=1;
-
-			// increase argument counter
-			argcount++;
-			continue; // go to next argument
-		} else {
-			fprintf(stderr,"Error: last valid argument should be \"exact\", got %s! \n",argv[loop]);
-			exit(-1);
+	} else if (strcmp(argv[loop],"-adevice") == 0) {
+		if (loop+1 < argc) {
+			loop++;
+			global.devicename=argv[loop];
 		}; // end if
-	} else {
-		fprintf(stderr,"Error: To many parameters. Stopped at argument %s! \n",argv[loop]);
-		exit(-1);
-	}; // end else - elsif (...) - if
+		continue;
+	} else if (strcmp(argv[loop],"-exact") == 0) {
+		global.exact=1;
+		continue;
+	} else if (strcmp(argv[loop],"-udp") == 0) {
+		if (loop+3 < argc) {
+			loop++; global.c_ipaddr=argv[loop]; 
+			loop++; global.c_udpport=atoi(argv[loop]);
+			loop++; global.p_udpport=atoi(argv[loop]);
+		}; // end if
+		continue;
+	}; // end elsif - ... - if (options)
 }; // end for
 
+fprintf(stderr,"global.exact = %d \n",global.exact);
 
-// We need at least 3 valid arguments: destination-ip destination-udpport listening-udpport
-if (argcount < 3) {
+// We need at least 2 arguments: destination-ip destination-udpport listening-udpport
+if (argc < 2) {
 	fprintf(stderr,"Error: at least 3 arguments needed. \n");
-	fprintf(stderr,"Usage: %s [ options ] [-key | -gpio <gpioport>] <destination ip-address> <destination udp port> <receive udp port> [ <audiodevice> [exact] ] \n",argv[0]);
+	fprintf(stderr,"Usage: %s [ options ] [-key | -gpio <gpioport>] -adevice <audiodevice> [-exact] -udp <destination ip-address> <destination udp port> <local udp port> \n",argv[0]);
 	fprintf(stderr,"Note: use device \"\" to get list of devices.\n");
 	fprintf(stderr,"Options: \n");
-	fprintf(stderr,"  -4: ipv4 hostlookup only\n");
-	fprintf(stderr,"  -6: ipv6 hostlookup only\n\n");
-	fprintf(stderr," -sc: audio capture is stereo\n");
-	fprintf(stderr," -sp: audio playback is stereo\n\n");
-	fprintf(stderr," -pi: ptt invert (only used for gpio user-PTT input)\n\n");
-	fprintf(stderr," -v: increase verboselevel\n");
+	fprintf(stderr,"           -4: ipv4 hostlookup only\n");
+	fprintf(stderr,"           -6: ipv6 hostlookup only\n");
+	fprintf(stderr,"\n");
+	fprintf(stderr," -forcestereo: Force stereo audio ('s' = sender, 'r' = receiver, 'b' = both\n");
+	fprintf(stderr," -halfduplex : Audio playback/capture is half duplex\n");
+	fprintf(stderr,"\n");
+	fprintf(stderr," -pttinvert  : ptt invert (only used for gpio user-PTT input)\n");
+	fprintf(stderr,"\n");
+	fprintf(stderr," -v          : increase verboselevel\n");
 	fprintf(stderr,"\n");
 	exit(-1);
 }; // end if
@@ -330,6 +327,14 @@ if (global.ptt == -2){
 	fprintf(stderr,"Error: no user PTT switching selected.\n");
 	exit(-1);
 }; // end if
+
+// set correct callback function
+//if (global.halfduplex) {
+//	*callback_funct=funct_callback_hd;
+//} else {
+//	*callback_funct=funct_callback_fd;
+//}; // end else - if
+
 
 /// INIT AUDIO
 printf("INITIALISING PORTAUDIO (this can take some time, please ignore any errors below) ... \n");
@@ -435,76 +440,124 @@ if (global.ptt == -1) {
 }; // end else - if
 
 
-// open PortAudio stream
-// do not start stream yet, will be done further down
-pa_ret = Pa_OpenStream (
-	&stream,
-	&global.inputParameters, 
-	&global.outputParameters,
-	48000, // sample rate
-	1920, // frames per buffer: (48000 samples / sec @ 40 ms)
-	paClipOff, // we won't output out of range samples,
-					// so don't bother clipping them
-	funct_callback, // callback function
-	&global // parameters passed to callback function
-);
-
-if (pa_ret != paNoError) {
-	Pa_Terminate();
-	fprintf(stderr,"Error in Pa_OpenStream: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
-	exit(-1);
-}; // end if
-
-// Start stream
-pa_ret=Pa_StartStream(stream);
-
-if (pa_ret != paNoError) {
-	Pa_Terminate();
-	fprintf(stderr,"Error in Pa_StartStream: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
-	exit(-1);
-}; // end if
-
-
-// init some vars
-callback_errorcount=0;
+// init vars
 callback_lastcount=0; 
+callback_errorcount=0;
 
-while (( pa_ret = Pa_IsStreamActive (stream)) == 1) {
-	// endless sleep, wake up and check status every 2 seconds
-	Pa_Sleep(1000);
 
-	callback_thiscount=global.callbackcount;
+while (FOREVER) {
+	// open PortAudio stream
+	PaStreamParameters * pa_in, * pa_out;	
 
-	// we should get 25 audio-frames per second (40 ms / frame). If we receive less then 15 or more then 35, there is clearly something wrong
-	if ((callback_thiscount-callback_lastcount < 15) || (callback_thiscount-callback_lastcount > 35)) {
-		callback_errorcount++;
-		fprintf(stderr,"Warning: callback function called %d times last second. Should have been 25 times!\n",callback_thiscount-callback_lastcount);
 
-		// break out if error during more then 20 seconds
-		if (callback_errorcount > 20) {
-			fprintf(stderr,"Error: callback function called to few for more then 20 seconds. Exiting!\n");
-			break;
-		}; // end if
+	if (global.halfduplex==0) {
+		pa_in=&global.inputParameters;
+		pa_out=&global.outputParameters;
+	} else if (global.transmit==0) {
+		// sending, make stream output
+		pa_in=NULL;
+		pa_out=&global.outputParameters;
 	} else {
-		// reset error counter
-		callback_errorcount=0;
+		pa_in=&global.inputParameters;
+		pa_out=NULL;
 	}; // end if
 
-	callback_lastcount=callback_thiscount;
-}; // end while
+	// open stream
+	if (global.halfduplex) {
+		pa_ret = Pa_OpenStream (
+			&stream,
+			pa_in,
+			pa_out,
+			48000, // sample rate
+			1920, // frames per buffer: (48000 samples / sec @ 40 ms)
+			paClipOff, // we won't output out of range samples,
+							// so don't bother clipping them
+			funct_callback_hd, // half duplex
+			&global // parameters passed to callback function
+		);
+	} else {
+		pa_ret = Pa_OpenStream (
+			&stream,
+			pa_in,
+			pa_out,
+			48000, // sample rate
+			1920, // frames per buffer: (48000 samples / sec @ 40 ms)
+			paClipOff, // we won't output out of range samples,
+							// so don't bother clipping them
+			funct_callback_fd, // full duplex
+			&global // parameters passed to callback function
+		);
+	}; // end - else - if
+
+	if (pa_ret != paNoError) {
+		Pa_Terminate();
+		fprintf(stderr,"Error in Pa_OpenStream: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
+		exit(-1);
+	}; // end if
+
+	// Start stream
+	pa_ret=Pa_StartStream(stream);
+
+	if (pa_ret != paNoError) {
+		Pa_Terminate();
+		fprintf(stderr,"Error in Pa_StartStream: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
+		exit(-1);
+	}; // end if
+
+
+	while (( pa_ret = Pa_IsStreamActive (stream)) == 1) {
+		// endless sleep, wake up and check status every 0.2 seconds
+		Pa_Sleep(200);
+
+		callback_thiscount=global.callbackcount;
+
+		// we should get 5 audio-frames per second (40 ms / frame). If we receive less then 2 or more then 8, there is clearly something wrong
+		if ((callback_thiscount-callback_lastcount < 2) || (callback_thiscount-callback_lastcount > 8)) {
+			callback_errorcount++;
+
+			// only print out error message as of second event
+			// (to avoid messages during PTT switches)
+			if (callback_errorcount >= 2) {
+				fprintf(stderr,"Warning: callback function called %d times last second. Should have been 5 times!\n",callback_thiscount-callback_lastcount);
+			}; // end if
+
+			// break out if error during more then 20 seconds
+			if (callback_errorcount > 20) {
+				fprintf(stderr,"Error: callback function called to few for more then 20 seconds. Exiting!\n");
+				break;
+			}; // end if
+		} else {
+			// reset error counter
+			callback_errorcount=0;
+		}; // end if
+
+		callback_lastcount=callback_thiscount;
+	}; // end while
+
+	// break out if to many errors
+	if (callback_errorcount > 20) {
+		break;
+	}; // end if
+
+
+	// did "Pa_isStreamActive" give errors?
+	if (pa_ret < 0) {
+		Pa_Terminate();
+		fprintf(stderr,"Error in Pa_isStreamActive: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
+		exit(-1);
+	}; // end if
+
+	// close stream
+	pa_ret = Pa_CloseStream (stream);
+	if (pa_ret != paNoError) {
+		Pa_Terminate();
+		fprintf(stderr,"Error in Pa_CloseStream: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
+		exit(-1);
+	}; // end if
+
+}; // end while (endless loop)
 
 // dropped out of endless loop. Should not happen
-
-if (pa_ret < 0) {
-	Pa_Terminate();
-	fprintf(stderr,"Error in Pa_isStreamActive: %s(%d) \n",Pa_GetErrorText(pa_ret),pa_ret);
-	exit(-1);
-}; // end if
-
-
-if (callback_errorcount <= 20) {
-	fprintf(stderr,"Error: audiocap dropped out of audiocapturing loop. Should not happen!\n");
-}; // end if
 
 
 pa_ret=Pa_CloseStream(stream);
@@ -517,6 +570,20 @@ if (pa_ret != paNoError) {
 // Done!!!
 
 Pa_Terminate();
+
+
+// if "key" PTT switching, re-enable echo
+if (global.ptt == -1) {
+	// reenable echo on local console
+
+	struct termios tio;
+	// get termiod struct for stdin
+	tcgetattr(0,&tio);
+	// disable echo
+	tio.c_lflag |= (ECHO);
+	// write change to console
+	tcsetattr(0,TCSANOW,&tio);
+}
 
 exit(-1);
 }; // end function funct_audioin

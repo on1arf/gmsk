@@ -26,10 +26,10 @@
 
 // options
 #define DISABLE_AUDIOLEVELCHECK 1 // set to "1" to disable audio level check, else set to "0"
-#define NUMBUFF 16 // number of audio buffers
+#define NUMBUFF 30 // number of audio buffers 30 * 40 ms = 1.2 sec
 
-#define DEFAULT_SILENCEBEGIN 3 // 0.3 seconds silence at beginning
-#define DEFAULT_SILENCEEND 10 // 1 second silence at end
+#define DEFAULT_SILENCEBEGIN 20 // 0.2 seconds silence at beginning
+#define DEFAULT_SILENCEEND 50 // 1 second silence at end
 
 // change to 1 for strict c2encap streaming protocol checking
 #define C2ENCAP_STRICT 0

@@ -198,7 +198,6 @@ while (FOREVER ) {
 		continue;
 	}; // end if
 
-
 	// check beginning of frame, it should contain the c2enc signature
 	if (memcmp(udpbuffer,C2ENCAP_HEAD,3)) {
 		// signature does not match, ignore packet
@@ -260,7 +259,6 @@ while (FOREVER ) {
 		continue;
 	}; // end if
 
-
 	///////////////////////////////////////
 	// process frame
 
@@ -289,6 +287,11 @@ while (FOREVER ) {
 			// queue silence
 			bufferfill_silence(pglobal->silencebegin,pglobal);
 
+			// set "receivefromnet" marker, so that the audio callback
+			// function can switch to "netreceive" mode
+			pglobal->receivefromnet=1;
+
+
 
 			// API call to initiate C2GMSK stream, return one or more audio blocks
 			ret=c2gmsk_mod_start(pglobal->c2gmsksessid,c2gmsk_pchain);
@@ -306,10 +309,6 @@ while (FOREVER ) {
 
 			// go to state 1
 			state=1;
-
-			// set "receivefromnet" marker, so that the audio callback
-			// function can switch to "netreceive" mode
-			pglobal->receivefromnet=1;
 
 #if C2ENCAP_STRICT == 0
 			if (!gotostate1) {

@@ -19,6 +19,9 @@
  */
 
 
+// version 20121222: initial release
+// version 20130404: added halfduplex support
+
 
 
 // original notice

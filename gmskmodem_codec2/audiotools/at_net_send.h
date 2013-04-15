@@ -11,6 +11,8 @@
  *      GNU General Public License for more details.
  */
 
+// version 20121222: initial release
+// version 20130404: added halfduplex support
 
 
 
@@ -52,7 +54,7 @@ int new_c_ptr_read;
 
 // other vars
 int ret;
-int state, oldstate;
+int state, oldstate, changeofstate;
 
 
 // function starts here
@@ -207,26 +209,41 @@ pglobal->networksendready=1;
 oldstate=0;
 // loop forever
 while (FOREVER) {
-	// wait for data on data on ringbuffer
-	new_c_ptr_read=pglobal->c_ptr_read+1;
 
-	if (new_c_ptr_read >= NUMBUFF) {
-		new_c_ptr_read=0;
-	};
+	// reiinit "change of state"
+	changeofstate=0;
 
-	// is there data to process?
-	if (new_c_ptr_read == pglobal->c_ptr_write) {
-		// no data to process
-		// sleep 4 ms and return
-		usleep(4000);
-		continue;
-	}; // end if
+	// loop until data received or change of state (during halfduplex)
+	while (FOREVER) {
+		// wait for data on data on ringbuffer
+		new_c_ptr_read=pglobal->c_ptr_read+1;
+
+		if (new_c_ptr_read >= NUMBUFF) {
+			new_c_ptr_read=0;
+		};
+
+		// is there data to process?
+		if (new_c_ptr_read == pglobal->c_ptr_write) {
+			// no data to process
+			// sleep 4 ms and return
+			usleep(4000);
+		} else {
+			// we have data, break out of while
+			break;
+		}; // end if
+
+		if ((pglobal->halfduplex) && (oldstate != pglobal->transmit)) {
+			changeofstate=1;
+			break;
+		}; // end if
+
+	}; // end endless loop until valid packet or change of state
 
 
 	// OK, we've got data in ringbuffer
 
 	// get state from "PTT" subthread
-	state=global.transmit;
+	state=pglobal->transmit;
 
 	if (state) {
 		// State = 1: write audio
@@ -248,7 +265,6 @@ while (FOREVER) {
 				sendto(udpsd,&c2_begin,C2ENCAP_SIZE_MARK,0,sendto_aiaddr, sendto_sizeaiaddr);
 			}; // end else - if
 
-//			putc('B',stderr);
 		}
 
 
@@ -281,7 +297,6 @@ while (FOREVER) {
 			fprintf(stderr,"Error in sendto: reason %d (%s)\n",errno, strerror(errno));
 		}; // end if
 
-//		putc('T',stderr);
 	} else {
 		// state = 0, do not send
 		// however, if we go from "oldstate = 1 - > state = 0", this is
@@ -297,13 +312,16 @@ while (FOREVER) {
 				sendto(udpsd,&c2_end,C2ENCAP_SIZE_MARK,0,sendto_aiaddr, sendto_sizeaiaddr);
 			}; // end if
 
-//			putc('E',stderr);
 		}; // end if 
 	}; // end else - if
 	oldstate=state;
 
 	// move up marker
-	pglobal->c_ptr_read=new_c_ptr_read;
+	// only if action was NOT due to "change of state"
+	if (!changeofstate) {
+		pglobal->c_ptr_read=new_c_ptr_read;
+	}; // end if
+
 
 }; // end endless loop
 

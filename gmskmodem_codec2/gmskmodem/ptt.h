@@ -384,6 +384,9 @@ while (FOREVER) {
 		continue;
 	}; // end if
 
+	// sleep 100 ms
+	usleep(100000);
+
 }; // end while
 
 

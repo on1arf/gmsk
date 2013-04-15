@@ -13,6 +13,9 @@
  *      GNU General Public License for more details.
  */
 
+// version 20121222: initial release
+// version 20130404: added halfduplex support
+
 
 
 

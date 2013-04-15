@@ -11,6 +11,8 @@
  *      GNU General Public License for more details.
  */
 
+// version 20121222: initial release
+// version 20130404: added halfduplex support
 
 
 
@@ -63,6 +65,20 @@ c2encap_begindata = (uint8_t*) &udpbuffer[4];
 // INIT NETWORK
 
 // open inbound UDP socket and bind to socket
+
+// if neither ipv4 or ipv6 is forced, first try opening socket in ipv6
+// if it fails with "Address family not supported", we can
+// try again using ipv4
+
+if ((!pglobal->ipv4only) && (!pglobal->ipv6only)) {
+	udpsock=socket(AF_INET6,SOCK_DGRAM,0);
+
+	if ((udpsock < 0) && (errno == EAFNOSUPPORT)) {
+		pglobal->ipv4only=1;
+	}; // end if
+}; // end if
+
+
 if (pglobal->ipv4only) {
 	udpsock=socket(AF_INET,SOCK_DGRAM,0);
 
@@ -81,7 +97,13 @@ if (pglobal->ipv4only) {
 
 } else {
 	// IPV6 socket can handle both ipv4 and ipv6
-	udpsock=socket(AF_INET6,SOCK_DGRAM,0);
+
+	// socket is already opened above if ipv4 and ipv6 are not forced
+
+	// only redo "open" if ipv6 is forced
+	if (pglobal->ipv6only) {
+		udpsock=socket(AF_INET6,SOCK_DGRAM,0);
+	}; // end if
 
 	if (udpsock < 0) {
 		fprintf(stderr,"Error creating socket in at_net_received: %d (%s) \n",errno,strerror(errno));
@@ -264,65 +286,90 @@ while (FOREVER ) {
 			// received start, go to state 1
 			state=1;
 			continue;
+#if C2ENCAP_STRICT == 0
+		// less strict checking
+		} else if (*c2encap_type == C2ENCAP_MARK_END) {
+			// do nothing, silently ignore and go to next packet
+			continue;
+		} else if (*c2encap_type == C2ENCAP_DATA_VOICE1400) {
+			// we should have received a "start", but go to state 1 anyway.
+			// do not do a "continue" as we do want the current frame to be
+			// processed below
+			state=1;
+#else 
 		} else {
 			fprintf(stderr,"Warning: received packet of type 0X%02X in state 0. Ignoring packet! \n",*c2encap_type);
 			continue;
+#endif
 		}; // end if
-	} else if (state == 1) {
+		continue;
+	};	// end if (state == 0)
+
+	if (state == 1) {
 		// state 1: receiving voice data, until we receive a "end" marker
 		if (*c2encap_type == C2ENCAP_MARK_END) {
 			// end received. Go back to state 0
 			state=0;
 			continue;
+#if C2ENCAP_STRICT == 0
+		// silently ignore any additional "start" messages
+		} else if (*c2encap_type == C2ENCAP_MARK_BEGIN) {
+			// do nothing, ignore and go to next packet
+			continue;
+#endif
+
 		} else if (*c2encap_type != C2ENCAP_DATA_VOICE1400) {
 			fprintf(stderr,"Warning: received packet of type 0X%02X in state 1. Ignoring packet! \n",*c2encap_type);
 			continue;
 		} else {
 			// voice 1400 data packet. Decode and play out
 
-			// first check if there is place to store the result
-			new_ptr_write = pglobal->p_ptr_write+1;
-			if (new_ptr_write >= NUMBUFF) {
-				// wrap around at NUMBUFF
-				new_ptr_write=0;
-			}; // end if
-
-			if (new_ptr_write == pglobal->p_ptr_read) {
-				// oeps. No buffers available to write data
-				fputc('B',stderr);
-			} else {
-//				fputc('Q',stderr);
-
-				// decode codec2 frame
-  				codec2_decode(codec2, audiobuff8k,c2encap_begindata);
-				
-				// convert to 48000k, store in ringbuffer
-				convert_8kto48k(audiobuff8k,pglobal->p_ringbuffer[new_ptr_write],0);
-				
-				// make stereo (duplicate channels) if needed
-				if (pglobal->outputParameters.channelCount == 2) {
-					int loop;
-					int16_t *p1, *p2;
-
-					// codec2_decode returns a buffer of 16-bit samples, MONO
-					// so duplicate all samples, start with last sample, move down to sample "1" (not 0);
-					p1=&pglobal->p_ringbuffer[new_ptr_write][3839]; // last sample of buffer (1920 samples stereo = 3840 samples mono)
-					p2=&pglobal->p_ringbuffer[new_ptr_write][1919]; // last sample of buffer (mono)
-
-					for (loop=0; loop < 1919; loop++) {
-						*p1 = *p2; p1--; // copy 1st octet, move down "write" pointer
-						*p1 = *p2; p1--; p2--; // copy 2nd time, move down both pointers
-					}; // end if
-
-					// last sample, just copy (no need anymore to move pointers)
-					*p1 = *p2;
+			// queue data, not when in "halfduplex" mode and sending
+			if (!((pglobal->halfduplex) && (pglobal->transmit))) {
+				// first check if there is place to store the result
+				new_ptr_write = pglobal->p_ptr_write+1;
+				if (new_ptr_write >= NUMBUFF) {
+					// wrap around at NUMBUFF
+					new_ptr_write=0;
 				}; // end if
 
-				// move up pointer in global vars
-				pglobal->p_ptr_write=new_ptr_write;
-			}; // end if
+				if (new_ptr_write == pglobal->p_ptr_read) {
+					// oeps. No buffers available to write data
+					fputc('B',stderr);
+				} else {
+//				fputc('Q',stderr);
 
-		}; // end if
+					// decode codec2 frame
+  					codec2_decode(codec2, audiobuff8k,c2encap_begindata);
+				
+					// convert to 48000k, store in ringbuffer
+					convert_8kto48k(audiobuff8k,pglobal->p_ringbuffer[new_ptr_write],0);
+				
+					// make stereo (duplicate channels) if needed
+					if (pglobal->outputParameters.channelCount == 2) {
+						int loop;
+						int16_t *p1, *p2;
+	
+						// codec2_decode returns a buffer of 16-bit samples, MONO
+						// so duplicate all samples, start with last sample, move down to sample "1" (not 0);
+						p1=&pglobal->p_ringbuffer[new_ptr_write][3839]; // last sample of buffer (1920 samples stereo = 3840 samples mono)
+						p2=&pglobal->p_ringbuffer[new_ptr_write][1919]; // last sample of buffer (mono)
+
+						for (loop=0; loop < 1919; loop++) {
+							*p1 = *p2; p1--; // copy 1st octet, move down "write" pointer
+							*p1 = *p2; p1--; p2--; // copy 2nd time, move down both pointers
+						}; // end if
+
+						// last sample, just copy (no need anymore to move pointers)
+						*p1 = *p2;
+					}; // end if
+
+					// move up pointer in global vars
+					pglobal->p_ptr_write=new_ptr_write;
+				}; // end if
+
+			}; // end if (not (halfduplex and sendinf))
+		}; // end else - elsif - if
 	} else {
 		fprintf(stderr,"Internal Error: unknow state %d in audioplay main loop. Should not happen. Exiting!!!\n",state);
 		exit(-1);

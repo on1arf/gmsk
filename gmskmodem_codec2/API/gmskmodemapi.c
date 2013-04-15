@@ -271,8 +271,10 @@ if (ret != C2GMSK_RET_OK) {
 }; // end if
 
 // change state: send change state message
-ret=queue_m_msg_2(sessid,C2GMSK_MSG_STATECHANGE,sessid->m_state,0); // move from state 1 to 0
+ret=queue_m_msg_2(sessid,C2GMSK_MSG_STATECHANGE,1,0); // move from state 1 to 0
 if (ret != C2GMSK_RET_OK) {
+	// reinit state, even in case of error
+	sessid->m_state=0;
 	return(ret);
 }; // end if
 
@@ -287,7 +289,7 @@ sessid->m_state=0;
 return(C2GMSK_RET_OK);
 
 
-}; // end function c2gmsk modulate end
+}; // end function c2gmsk modulate voice1400 END
 
 
 /////////////////////////////////////////////////////////////////////
@@ -1322,14 +1324,14 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
          sessid->d_state=0; // new state is 0, "waiting for sync"
 
 
-			ret=queue_d_msg_2(sessid,C2GMSK_MSG_STATECHANGE,20, 0 ); // move from state 22 to 0
+			ret=queue_d_msg_2(sessid,C2GMSK_MSG_STATECHANGE,22 , 0 ); // move from state 22 to 0
 			if (ret != C2GMSK_RET_OK) {
 				return(ret);
 			}; // end if
 
          // get next audio-frame to look for new stream
          continue;
-      }; // end if (state 21)
+      }; // end if (state 22)
 
 }; // end for (sampleloop)
 

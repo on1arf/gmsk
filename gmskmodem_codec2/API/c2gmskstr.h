@@ -68,7 +68,7 @@ c2gmsk_str_ret[C2GMSK_RET_OPERATIONDISABLED]="Operation Disabled";
 
 // type of data
 for (loop=0; loop <= C2GMSK_MSG_HIGHEST; loop++) {
-	c2gmsk_str_msg[loop]=0;
+	c2gmsk_str_msg[loop]=NULL;
 }; // end for
 
 c2gmsk_str_msg[C2GMSK_MSG_UNDEF]="undefined";

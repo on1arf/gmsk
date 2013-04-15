@@ -30,7 +30,7 @@ char * help="Usage: gmskmodem [-h] [-v] [-4 | -6] [-d] [-dd] [-da] [-sb <0.1sec>
 \n\
 Options:\n\
  -h: help (this text)\n\
- -v: verbose\n\
+ -v: verbose (repeat for more verbose)\n\
 \n\
 Mandatory arguments:\n\
  -udp <remote ip-address> <remote udp-port> <local udp-port>: IP-address + UDP port of remote \"audiotool\" application, local UDP-port to receive UDP-traffic\n\
