@@ -1,3 +1,24 @@
+// C2ECHO: receives C2ENC (codec2 message in UDP), buffers and sends back
+// designed as tool to correctly configure the "audiotool" audio levels
+
+
+/*
+ *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
+ *
+ *      This program is free software; you can redistribute it and/or modify
+ *      it under the terms of the GNU General Public License as published by
+ *      the Free Software Foundation; version 2 of the License.
+ *
+ *      This program is distributed in the hope that it will be useful,
+ *      but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *      GNU General Public License for more details.
+ */
+
+
+// version 20130414: initial release
+
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>

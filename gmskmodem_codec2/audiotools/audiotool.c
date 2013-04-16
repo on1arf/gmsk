@@ -8,6 +8,7 @@
 
 // version 20121222: initial release
 // version 20130404: added half duplex support
+// version 20130415: minor bugfixes
 
 /*
  *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
@@ -181,8 +182,6 @@ PaError pa_ret;
 pthread_t thr_net_receive, thr_net_send, thr_ptt;
 
 // portaudio callback function, depends if full or half duplex
-//int * callback_funct();
-//int * (const void *, long unsigned, const struct PaStreamCallbackTimeInfo *, PaStreamCallbackFlags, void*) callback_funct();
 int (callback_funct(const void *, void *, long unsigned, const struct PaStreamCallbackTimeInfo *, PaStreamCallbackFlags, void*));
 
 
@@ -228,9 +227,9 @@ for (loop=1; loop < argc; loop++) {
 	} else if (strcmp(argv[loop],"-forcestereo") == 0) {
 		if (loop+1 < argc) {
 			loop++;
-			if ((strcmp(argv[loop],"r") == 0) || (strcmp(argv[loop],"R") == 0)) {
+			if ((strcmp(argv[loop],"c") == 0) || (strcmp(argv[loop],"C") == 0)) {
 				global.force_stereo_play=0; global.force_stereo_capt=1;
-			} else if ((strcmp(argv[loop],"s") == 0) || (strcmp(argv[loop],"S") == 0)) {
+			} else if ((strcmp(argv[loop],"p") == 0) || (strcmp(argv[loop],"P") == 0)) {
 				global.force_stereo_play=1; global.force_stereo_capt=0;
 			} else if ((strcmp(argv[loop],"b") == 0) || (strcmp(argv[loop],"B") == 0)) {
 				global.force_stereo_play=1; global.force_stereo_capt=1;
@@ -282,8 +281,6 @@ for (loop=1; loop < argc; loop++) {
 	}; // end elsif - ... - if (options)
 }; // end for
 
-fprintf(stderr,"global.exact = %d \n",global.exact);
-
 // We need at least 2 arguments: destination-ip destination-udpport listening-udpport
 if (argc < 2) {
 	fprintf(stderr,"Error: at least 3 arguments needed. \n");
@@ -293,7 +290,7 @@ if (argc < 2) {
 	fprintf(stderr,"           -4: ipv4 hostlookup only\n");
 	fprintf(stderr,"           -6: ipv6 hostlookup only\n");
 	fprintf(stderr,"\n");
-	fprintf(stderr," -forcestereo: Force stereo audio ('s' = sender, 'r' = receiver, 'b' = both\n");
+	fprintf(stderr," -forcestereo: Force stereo audio ('c' = capture, 'p' = playback, 'b' = both)\n");
 	fprintf(stderr," -halfduplex : Audio playback/capture is half duplex\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr," -pttinvert  : ptt invert (only used for gpio user-PTT input)\n");
@@ -327,14 +324,6 @@ if (global.ptt == -2){
 	fprintf(stderr,"Error: no user PTT switching selected.\n");
 	exit(-1);
 }; // end if
-
-// set correct callback function
-//if (global.halfduplex) {
-//	*callback_funct=funct_callback_hd;
-//} else {
-//	*callback_funct=funct_callback_fd;
-//}; // end else - if
-
 
 /// INIT AUDIO
 printf("INITIALISING PORTAUDIO (this can take some time, please ignore any errors below) ... \n");

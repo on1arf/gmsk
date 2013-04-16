@@ -18,10 +18,13 @@
 
 
 
-all: audiotool c2echo
+all: audiotool c2echo findaudiodev
 
 audiotool: at_audio_callback.h at_net_receive.h Makefile at_audio_convert_filter.h at_net_send.h audiotool.c at_audio_convert.h at_ptt_gpio.h at_audio_devs.h at_ptt_keyin.h
 	gcc -Wall -O2 -o audiotool audiotool.c -lportaudio -lcodec2
+
+findaudiodev: findaudiodev.c Makefile
+	gcc -Wall -O2 -o findaudiodev findaudiodev.c -lportaudio 
 
 c2echo: c2echo.c Makefile
 	gcc -Wall -O2 -o c2echo c2echo.c
@@ -29,5 +32,6 @@ c2echo: c2echo.c Makefile
 install:
 	install -o root -g root -m 755 audiotool /usr/bin
 	install -o root -g root -m 755 c2echo /usr/bin
+	install -o root -g root -m 755 findaudiodev /usr/bin
 
 
