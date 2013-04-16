@@ -24,8 +24,9 @@ reboot
 - see bottom of page http://www.rowetel.com/blog/codec2.html:
 2.1.2. svn co https://freetel.svn.sourceforge.net/svnroot/freetel/codec2-dev codec2-dev
 2.1.3. cd codec2-dev
-2.1.4. make
-2.1.5. sudo make install
+2.1.4. ./configure
+2.1.5. make
+2.1.6. sudo make install
 
 
 2.2 c2gmsk
