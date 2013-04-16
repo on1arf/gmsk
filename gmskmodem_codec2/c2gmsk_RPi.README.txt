@@ -1,0 +1,223 @@
+Installation procedure for "c2gmsk modem" on raspberry pi:
+
+(version 20130416)
+
+
+**** Step 1: Preparing the Pi:
+
+Standard Raspbian “wheezy” installation ("sudo raspi-config" procedure)
+1.1 change password for "pi" user
+1.2 set GPU memory 16M
+
+1.3 do "apt-get update", "apt-get dist-upgrade" and reboot
+
+1.4 configure USB bus on RPi as USB 1.1.
+vi /boot/cmdline.txt
+Insert text in first line: dwc_otg.speed=1
+reboot
+
+**** Step 2: Installing the software:
+
+2.1 codec2:
+2.1.1. sudo apt-get install subversion automake
+
+- see bottom of page http://www.rowetel.com/blog/codec2.html:
+2.1.2. svn co https://freetel.svn.sourceforge.net/svnroot/freetel/codec2-dev codec2-dev
+2.1.3. cd codec2-dev
+2.1.4. make
+2.1.5. sudo make install
+
+
+2.2 c2gmsk
+
+- Install packages
+2.2.1 sudo apt-get install portaudio19-dev
+
+- Download latest image from github:
+2.2.2 wget https://github.com/on1arf/gmsk/archive/master.zip
+
+- Extract "gmskmodem_codec2" package:
+2.2.3. unzip master.zip gmsk-master/gmskmodem_codec2/*
+
+- c2encap package:
+2.2.4. cd  ~/gmsk-master/gmskmodem_codec2/c2encap ; make ; sudo make install
+
+- c2gmsk api package:
+2.2.5. cd ~/gmsk-master/gmskmodem_codec2/API ; make ; sudo make install
+
+- c2gmsk modem package:
+2.2.6. cd ~/gmsk-master/gmskmodem_codec2/gmskmodem ; make ; sudo make install
+
+- audiotools package:
+2.2.7 cd ~/gmsk-master/gmskmodem_codec2/audiotools ; make ; sudo make install
+
+
+- Other tools that will be needed:
+2.2.8 sudo apt-get install tcpdump
+
+
+*** Step 3: getting to know your audio system:
+
+3.1/ connect two USB audio devices:
+
+3.2/ "findaudiodev"
+3.2.1. findaudiodev -> see options
+3.2.2. findaudiodev -adevice "" 2>/dev/null
+
+Output example:
+pi@raspberrypi ~ $ findaudiodev -adevice "" 2> /dev/null 
+INITIALISING PORTAUDIO (this can take some time, please ignore any errors below) ... 
+.... DONE
+Total number of devices found: 11
+
+Audio device: 0 (API:ALSA NAME:": USB Audio (hw:0,0))
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Audio device: 1 (API:ALSA NAME:C-Media USB Headphone Set: USB Audio (hw:1,0))
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Audio device: 2 (API:ALSA NAME:bcm2835 ALSA: bcm2835 ALSA (hw:2,0))
+
+Audio device: 3 (API:ALSA NAME:sysdefault)
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Audio device: 4 (API:ALSA NAME:front)
+
+Audio device: 5 (API:ALSA NAME:surround40)
+
+Audio device: 6 (API:ALSA NAME:iec958)
+
+Audio device: 7 (API:ALSA NAME:spdif)
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Audio device: 8 (API:ALSA NAME:mmap0)
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Audio device: 9 (API:ALSA NAME:dmix)
+
+Audio device: 10 (API:ALSA NAME:default)
+OUTPUT: Samplerate 48000 samples/sec supported in stereo.
+INPUT: Samplerate 48000 samples/sec supported in mono.
+Audio device matches all criteria
+
+Warning: Found 6 devices matching devicename "" supporting 48000 bps samplerate
+       Try again with a more strict devicename or use the "exact" option!
+
+-> audio-device usefull (this example)
+"Generic USB Audio Device" -> dongle to radio
+"C-Media USB Headphone Set" -> dongle to voice
+
+
+3.3/ Check audio level:
+
+3.3.1 - Open three consoles:
+-> console 1: c2echo 12345 12346
+-> console 2: audiotool -key -adevice "C-Media" -udp 127.0.0.1 12345 12346
+-> console 3: alsamixer -> press "F6" -> select correct device
+
+3.3.2 If audio "chopped and high-pitched". Use "forcestereo" option in audiotool (dongle does not work in mono)
+-> console 2: audiotool -key -adevice "C-Media" -udp 127.0.0.1 12345 12346 -forcestereo p
+
+3.3.3 check "half duplex" settings:
+-> console 2: audiotool -halfduplex -key -adevice "C-Media" -udp 127.0.0.1 12345 12346
+
+3.3.4 save settings
+When audio at correct level: "sudo alsactl store"
+
+
+3. 4/ Audio-level for interfaces to radio:
+
+3.4.1 "alsamixer".
+There are no known fixed values for the audio-levels on the interfaces between the radio and the RPi.
+
+My experience:
+3.4.2 capture level: +- 30 %
+
+3.4.3 playback level:
+To Yaesu FT857D: +- 30 a 40 %
+To Kenwoord TH-7E: Around 90 %
+
+"to be tested in real life".
+
+
+
+*** Step 4: Connecting the PTT switch to the RPi:
+
+4.1 Interface setup:
+My setup: use "diode -> resistor -> transistor" switch to drive PTT on Pi.
+See: Connections on RPi: see http://elinux.org/RPi_Low-level_peripherals
+
+4.1.1. Connect GND (pin P02-06) to ground
+4.1.2. Connect GPIO 18 (pin P02-12) -> Diode (|>|) and Resistor (33K) to base of transitor
+4.1.3. Connect PTT of radio to Collector of transistor
+4.1.4. Connect Emitter of transistor to ground
+
+4.2. Software preperations: (we need to find a more elegant and secure solution for this)
+cd /sys/class/gpio
+4.2.1 sudo su -
+(!!!! now, you are root. Take care!!!)
+
+4.2.2 echo "18" > export
+4.2.3. cd gpio18
+4.2.4. echo "0" > active_low
+4.2.5. echo "out" > direction
+
+4.2.6 Check PTT:
+echo "1" > value
+-> this should switch on the radio
+
+echo "0" > value
+-> this should switch of the radio
+
+4.2.7. chmod 666 value
+4.2.8. exit (go back to normal userlevel)
+
+
+
+**** Step 5: using the modem
+
+5.1 Start three console windows:
+
+-> 5.1.1. console 1: audio-tool:
+- do "audiotool" to see options
+- do "audiotool -key -halfduplex -adevice "C-Media" -udp 127.0.0.1 12345 12346"
+(add option "-forcestereo p" if needed)
+
+-> 5.1.2. console 2: modem
+- do "gmskmodem" to see options
+- do "gmskmodem -adevice Generic -halfduplex -udp 127.0.0.1 12346 12345 -ptt_gpio 18"
+(add option "-forcestereo p" if needed)
+
+
+-> 5.1.3. console 3: checking the communication
+- do "sudo tcpdump -n -i lo udp port 12345 or port 12346"
+(this will show UDP traffic is send between the modem and the "audiotool" application)
+
+
+
+5.2 other options:
+(mostly used when decoding)
+
+-v       -> verbose (e.g. status changes, FEC stats)
+-v -v    -> more verbose (versionid information)
+-v -v -v -> even more verbose (e.g. raw codec2 data)
+
+-d  -> "dump": dump raw data, only when datastream is syncronised
+-dd -> "dump more": dump raw data, also when datastream is not syncronised
+-da -> "dump average": dump average audio-level of received signal.
+
+
+
+73
+Kristoff - ON1ARF
+
