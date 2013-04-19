@@ -5,7 +5,7 @@ Installation procedure for "c2gmsk modem" on raspberry pi:
 
 **** Step 1: Preparing the Pi:
 
-Standard Raspbian “wheezy” installation ("sudo raspi-config" procedure)
+Standard Raspbian wheezy installation ("sudo raspi-config" procedure)
 1.1 change password for "pi" user
 1.2 set GPU memory 16M
 
@@ -51,6 +51,9 @@ reboot
 
 - audiotools package:
 2.2.7 cd ~/gmsk-master/gmskmodem_codec2/audiotools ; make ; sudo make install
+
+- tools package:
+2.2.8 cd ~/gmsk-master/gmskmodem_codec2/tools ; make ; sudo make install
 
 
 - Other tools that will be needed:
@@ -164,24 +167,16 @@ See: Connections on RPi: see http://elinux.org/RPi_Low-level_peripherals
 4.1.4. Connect Emitter of transistor to ground
 
 4.2. Software preperations: (we need to find a more elegant and secure solution for this)
-cd /sys/class/gpio
-4.2.1 sudo su -
-(!!!! now, you are root. Take care!!!)
+4.2.1 gpioinit -gpio_out 18
 
-4.2.2 echo "18" > export
-4.2.3. cd gpio18
-4.2.4. echo "0" > active_low
-4.2.5. echo "out" > direction
+4.2.2 Check PTT:
+cd /sys/class/gpio/gpio18/
 
-4.2.6 Check PTT:
 echo "1" > value
 -> this should switch on the radio
 
 echo "0" > value
 -> this should switch of the radio
-
-4.2.7. chmod 666 value
-4.2.8. exit (go back to normal userlevel)
 
 
 
