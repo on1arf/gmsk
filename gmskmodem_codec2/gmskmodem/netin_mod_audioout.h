@@ -163,6 +163,10 @@ state=0; // state 0 = wait for start
 pglobal->receivefromnet=0;
 
 
+if (pglobal->verboselevel >= 1) {
+	printf("MODULATE: listening.\n");
+};
+
 while (FOREVER ) {
 	// wait for UDP packets
 
@@ -274,6 +278,13 @@ while (FOREVER ) {
 			// do NOT do a "continue" as we do want the packet to be
 			// processed below
 
+			
+			if (pglobal->verboselevel >= 2) {
+				printf("MODULATE: receiving voice without start. Going to start anyway!.\n");
+			} else if (pglobal->verboselevel >= 1) {
+				printf("MODULATE: receiving.\n");
+			}; // end else - if
+
 			gotostate1=1;
 		}; // end if
 
@@ -309,6 +320,9 @@ while (FOREVER ) {
 
 			// go to state 1
 			state=1;
+			if (pglobal->verboselevel >= 1) {
+				printf("MODULATE: receiving.\n");
+			}; // end else - if
 
 #if C2ENCAP_STRICT == 0
 			if (!gotostate1) {
@@ -377,11 +391,18 @@ while (FOREVER ) {
 				bufferfill_audio_pcm48kmsg_p(c2gmsk_msg,pglobal);
 			}; 
 
+			if (pglobal->verboselevel >= 1) {
+				printf("MODULATE: Transmission end.\n");
+			}; // end else - if
 
 			// is there an id-file to play?
 			if (pglobal->idfile) {
 				// only play out idfile every "idfreq" times
 				if (idfilecount == 0) {
+					if (pglobal->verboselevel >= 1) {
+						printf("MODULATE: Transmitting idfile.\n");
+					}; // end else - if
+
 					int filesize=0;
 					ssize_t sizeread;
 					int idinfile;
@@ -431,6 +452,10 @@ while (FOREVER ) {
 			// clear "receive from net" flag to signal change of
 			// state to "portaudio callback" function
 			pglobal->receivefromnet=0;
+
+			if (pglobal->verboselevel >= 1) {
+				printf("MODULATE: Listening\n");
+			}; // end else - if
 
 			state=0;
 
