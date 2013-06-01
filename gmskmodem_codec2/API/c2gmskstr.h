@@ -83,6 +83,7 @@ c2gmsk_str_msg[C2GMSK_MSG_AUDIOAVGLVLTEST]="average audio-level test result";
 c2gmsk_str_msg[C2GMSK_MSG_INAUDIOINVERT]="input audio inversion";
 c2gmsk_str_msg[C2GMSK_MSG_VERSIONID]="versionid";
 c2gmsk_str_msg[C2GMSK_MSG_FECSTATS]="forward-error-correction statistics";
+c2gmsk_str_msg[C2GMSK_MSG_BITRATE]="bitrate";
 c2gmsk_str_msg[C2GMSK_PRINTBIT_MOD]="bitdump demodulated signals";
 c2gmsk_str_msg[C2GMSK_PRINTBIT_ALL]="bitdump all signals";
 c2gmsk_str_msg[C2GMSK_MSG_UNKNOWNVERSIONID]="unknown version id";

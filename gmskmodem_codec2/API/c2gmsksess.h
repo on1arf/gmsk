@@ -144,6 +144,12 @@ if (ret2 != C2GMSK_RET_OK) {
 	return(NULL);
 }; // end if
 
+ret2=queue_m_msg_2(newsessid,C2GMSK_MSG_CAPABILITIES, 15, C2GMSK_MODEMBITRATE_2400); // we support versionid 15 / bitrate 2400
+if (ret2 != C2GMSK_RET_OK) {
+	*ret=ret2;
+	return(NULL);
+}; // end if
+
 
 // return message queue
 *out=newsessid->m_chain;

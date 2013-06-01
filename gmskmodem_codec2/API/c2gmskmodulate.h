@@ -32,7 +32,8 @@
 
 
 // ADD TO BUFFER
-int c2gmskabuff48k_modulatebits (struct c2gmsk_session * sessid, unsigned char * in, int nbits, int orderinvert) {
+// version 20130516: remove bitorder
+int c2gmskabuff48k_modulatebits (struct c2gmsk_session * sessid, unsigned char * in, int nbits) {
 // modulate bits, add to m_audio buffer
 
 // local vars
@@ -41,25 +42,19 @@ int bitcounter;
 int loop;
 
 unsigned char * p_in;
-unsigned char * andbit, *andbit_begin;
-const unsigned char bitsl2r[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};  // left to right
-const unsigned char bitsr2l[8] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};      // right to left
+unsigned char * andbit;
+const unsigned char bits[8] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};      // right to left
+int samplesperbit=10;
 
 // audio returns
 // we receive 10 audio samples per bit (4800 bps gmsk stream @ 4800 Khz audio sampling)
-int16_t audioret[10]; // 
+// we receive 20 audio samples per bit (2400 bps gmsk stream @ 4800 Khz audio sampling)
+// so make buffer big enough for both
+int16_t audioret[20]; // 
 
 // return is no bits to modulate
 if (nbits <= 0) {
 	return(C2GMSK_RET_OK);
-}; // end if
-
-
-// do we go left-to-right or right-to-left?
-if (orderinvert) {
-	andbit_begin=(unsigned char *)bitsl2r;
-} else {
-	andbit_begin=(unsigned char *)bitsr2l;
 }; // end if
 
 
@@ -95,10 +90,19 @@ if (ret != C2GMSK_RET_OK) {
 }; // end if
 
 
-andbit=andbit_begin;
+andbit=(unsigned char *)bits;
 bitcounter=0;
 // set pointer to beginning of data
 p_in=in;
+
+
+if (sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+	// 2400 bps @ 48000 samples/sec = 20 samples / bit
+	samplesperbit=20;
+} else {
+	// 4800 bps @ 48000 samples/sec = 20 1amples / bit
+	samplesperbit=10;
+}; // end if
 
 for (loop=0; loop < nbits; loop++) {
 	if ((*p_in) & (*andbit)) {
@@ -112,7 +116,7 @@ for (loop=0; loop < nbits; loop++) {
 	}; // end if
 
 	// write audio to audio-buffer
-	ret=c2gmskabuff48_add(&sessid->m_abuff,audioret,10,sessid->m_chain);
+	ret=c2gmskabuff48_add(&sessid->m_abuff,audioret,samplesperbit,sessid->m_chain);
 
 	if (ret != C2GMSK_RET_OK) {
 		return(ret);
@@ -128,14 +132,13 @@ for (loop=0; loop < nbits; loop++) {
 		p_in++;
 
 		// reset AND bit pattern
-		andbit=andbit_begin;
+		andbit=(unsigned char *)bits;
                                 
 	} else {
 		// not wrapped, so just move up to next AND bit pattern
 		andbit++;
 	}; // end if
 }; // end for (nbits)
-
 
 
 // done: success

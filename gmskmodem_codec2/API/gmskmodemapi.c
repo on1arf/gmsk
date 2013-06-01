@@ -1,7 +1,8 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// version 4800/0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// version 2400/15: 2400 bps, interleave, FEC not implemented
 
 
 // The low-level DSP functions are largly taken from the
@@ -31,6 +32,7 @@
 // version 20130310: initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130506: added 2400 bps modem version 15 (0x1D499B)
 
 
 //////////////////////
@@ -41,10 +43,6 @@
 
 // some defines for sanity checks
 #define C2GMSKCHAIN_MAXSIZE 1048576 // 1 MB
-
-// defines for abuff_modulatebits order invert
-#define ORDERINVERT 1
-#define NOORDERINVERT 0
 
 
 // if nothing defined, use FLOAT
@@ -78,7 +76,8 @@
 
 // functions
 // DSP and low-level related functions (inherented from non-API version, modified for API)
-#include "a_dspstuff.h" // gmsk modulation filters
+#include "a_dspstuff_4800.h" // gmsk modulation filters for 4800 bps
+#include "a_dspstuff_2400.h" // gmsk modulation filters for 2400 bps (uses demodulator filter of 4800 bps modem) 
 #include "a_gmskmodulate.h" // modulate1bit
 
 // functions for pattern matching
@@ -116,7 +115,8 @@
 int c2gmsk_mod_voice1400 (struct c2gmsk_session *sessid, unsigned char *c2dataframe, struct c2gmsk_msgchain **out) {
 // MODULATE CHAIN. 1400 bps voice frame
 
-unsigned char outbuffer[24];
+unsigned char outbuffer[24]; // 192 bits for 4800 bps modem
+unsigned char outbuffer2[12]; // 96 bits for 2400 bps modem
 int ret;
 int loop;
 
@@ -147,48 +147,122 @@ if (sessid->m_state != 1) {
 }; // end if
 
 
+// some error checking
+assert((sessid->m_versrate == 0x0020) || (sessid->m_versrate == 0x001f));
 
-// first 3 chars (sync pattern) are "1110 0111  0000 1000  0101 1100" if not end
-outbuffer[0]=0xe7; outbuffer[1]=0x08; outbuffer[2]=0x5c;
+// 4800 bps / version 0 code
+if (sessid->m_versrate == 0x0020) {
 
-
-// rest is 3 times codec2 frame @ 1400 bps
-// octets 3 up to 9, 10 up to 16 and 17 up to 23 contain copy of codec2 frame
-memcpy(&outbuffer[3],c2dataframe,7);
-
-// copy with interleaving
-for (loop=0; loop<=6; loop++) {
-	outbuffer[interl2[loop]]=c2dataframe[loop];
-}; // end for
-
-// copy with interleaving
-for (loop=0; loop<=6; loop++) {
-	outbuffer[interl3[loop]]=c2dataframe[loop];
-}; // end for
-
-// apply scrambling to make stream more random
-
-// we have up to 8 known exor-patterns
-sessid->m_v1400_framecounter &= 0x7;
-
-c1=&scramble_exor[sessid->m_v1400_framecounter][0];
-// scrambling chars 3 up to 24 (starting at 0)
-c2=&outbuffer[3];
-
-// scramble 21 chars
-for (loop=0; loop < 21; loop++) {
-	*c2 ^= *c1;
-	c2++; c1++;
-}; // end for
-
-sessid->m_v1400_framecounter++; // no need to do range-checking, is done above on next iteration
+	// first 3 chars (sync pattern) are "1110 0111  0000 1000  0101 1100" if not end
+	outbuffer[0]=0xe7; outbuffer[1]=0x08; outbuffer[2]=0x5c;
 
 
-// modulate frame + add to queue
-ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192, NOORDERINVERT);
+	// rest is 3 times codec2 frame @ 1400 bps
+	// octets 3 up to 9, 10 up to 16 and 17 up to 23 contain copy of codec2 frame
+	memcpy(&outbuffer[3],c2dataframe,7);
 
-if (ret != C2GMSK_RET_OK) {
-	return (ret);
+	// copy with interleaving
+	for (loop=0; loop<=6; loop++) {
+		outbuffer[interl2[loop]]=c2dataframe[loop];
+	}; // end for
+
+	// copy with interleaving
+	for (loop=0; loop<=6; loop++) {
+		outbuffer[interl3[loop]]=c2dataframe[loop];
+	}; // end for
+
+	// apply scrambling to make stream more random
+
+	// we have up to 8 known exor-patterns
+	sessid->m_v1400_framecounter &= 0x7;
+
+	c1=&scramble_exor[sessid->m_v1400_framecounter][0];
+	// scrambling chars 3 up to 24 (starting at 0)
+	c2=&outbuffer[3];
+
+	// scramble 21 chars
+	for (loop=0; loop < 21; loop++) {
+		*c2 ^= *c1;
+		c2++; c1++;
+	}; // end for
+
+	sessid->m_v1400_framecounter++; // no need to do range-checking, is done above on next iteration
+
+	// modulate frame + add to queue
+	ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192);
+
+	if (ret != C2GMSK_RET_OK) {
+		return (ret);
+	}; // end if
+
+} else if (sessid->m_versrate == 0x001f) {
+	// 2400 bps / version 15
+
+	// prepare frame
+	int scramblestart=3;
+
+	// framecount: used to select scrambling pattern and if a sync pattern needs to be send or not
+	// can go from 0 to 7: 
+	sessid->m_v1400_framecounter &= 0x7;
+
+	// STEP 1 and 2: interleaving (for better FEC) + FEC
+	if (sessid->m_v1400_framecounter) {
+		// not first frame of group of 8: no sync
+
+		// copy and interleave voice bits
+		c2_interleave_2400_1400(c2dataframe,outbuffer,0,1);
+		scramblestart=0;
+
+// TO DO //
+///////////
+		// add code to apply FEC
+///////////
+	} else {
+		// first frame of group of 8: do sync
+
+		// copy sync pattern to first 3 octets
+		outbuffer[0]=0xe7; outbuffer[1]=0x08; outbuffer[2]=0x5c;
+
+		// copy and interleave voice bits
+		c2_interleave_2400_1400(c2dataframe,&outbuffer[3],1,1);
+		scramblestart=3;
+	}; // end else - if
+
+	// STEP 3: SCRAMBLING
+
+	// apply scrambling to make stream more random
+	// do not apply scrambling to 1st 3 char if sync pattern present
+	c1=&scramble_exor[sessid->m_v1400_framecounter][scramblestart];
+	c2=&outbuffer[scramblestart];
+
+	// scramble up to 12th chars
+	for (loop=scramblestart; loop < 12; loop++) {
+		*c2 ^= *c1;
+		c2++; c1++;
+	}; // end for
+
+
+	// STEP 4:
+	// interleave bits for transmission
+
+	if (sessid->m_v1400_framecounter) {
+	// not frame 0 -> no sync
+		interleaveTX_tx(outbuffer,outbuffer2,0);
+	} else {
+	// frame 0 -> sync
+		// modulate frame + add to queue
+		interleaveTX_tx(outbuffer,outbuffer2,1);
+	}; // end else - if
+
+	// modulate frame + add to queue
+	ret=c2gmskabuff48k_modulatebits(sessid, outbuffer2, 96);
+
+	if (ret != C2GMSK_RET_OK) {
+		return (ret);
+	}; // end if
+
+	sessid->m_v1400_framecounter++; // no need to do range-checking, is done above on next iteration
+
 }; // end if
 
 // point main application to chain
@@ -205,6 +279,7 @@ int c2gmsk_mod_voice1400_end (struct c2gmsk_session *sessid, struct c2gmsk_msgch
 
 unsigned char outbuffer[24];
 int ret;
+int loop;
 
 
 
@@ -234,41 +309,68 @@ if (sessid->m_state != 1) {
 
 
 
-// session based vars
-// should be initialised at the end of c2gmsk_mod_end
+// some error checking
+assert((sessid->m_versrate == 0x0020) || (sessid->m_versrate == 0x001f));
 
-// first 3 chars (sync pattern) are "0111 1110  1000 0000  1100 0101" if end
-outbuffer[0]=0x7e; outbuffer[1]=0x80; outbuffer[2]=0xc5;
+// 4800 bps / version 0 code
+if (sessid->m_versrate == 0x0020) {
+	// first 3 chars (sync pattern) are "0111 1110  1000 0000  1100 0101" 
+	outbuffer[0]=0x7e; outbuffer[1]=0x80; outbuffer[2]=0xc5;
+
+	// version/rate = 0x20 : 4800 bps, version 0
+
+	// rest is 3 times codec2 frame @ 1400 bps, as we create a dummy record, all data will be zero
+	// however, as we will need to "exor" it with the scrambling pattern, we can just copy
+	// the scrambling pattern to the data
+
+	// we have up to 8 known exor-patterns
+	sessid->m_v1400_framecounter &= 0x7;
+
+	memcpy(&outbuffer[3], &scramble_exor[sessid->m_v1400_framecounter][0],21);
+
+	// modulate frame + add to queue
+	// do 3 times
+	for (loop=0; loop<3; loop++) {
+		ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192);
+
+		if (ret != C2GMSK_RET_OK) {
+			return (ret);
+		}; // end if
+	}; // end for
+
+} else {
+	// version/rate = 0x1f : 2400 bps, version 15
 
 
-// rest is 3 times codec2 frame @ 1400 bps, as we create a dummy record, all data will be zero
-// however, as we will need to "exor" it with the scrambling pattern, we can just copy
-// the scrambling pattern to the data
+	// rest is 3 times codec2 frame @ 1400 bps, as we create a dummy record, all data will be zero
+	// however, as we will need to "exor" it with the scrambling pattern, we can just copy
+	// the scrambling pattern to the data
 
-// we have up to 8 known exor-patterns
-sessid->m_v1400_framecounter &= 0x7;
+	// set framecounter to "0" (sync is send)
 
-memcpy(&outbuffer[3], &scramble_exor[sessid->m_v1400_framecounter][0],21);
+	// copy scramble patterns 3 up to 11 
+	// then also apply transmission interleaving
+
+	// combine these two actions in one
+	// interleave bits for transmission:
+	interleaveTX_tx(&scramble_exor[0][0],outbuffer,1);
+
+	// first 3 chars (sync pattern) are "0111 1110  1000 0000  1100 0101" 
+	outbuffer[0]=0x7e; outbuffer[1]=0x80; outbuffer[2]=0xc5;
 
 
-// modulate frame + add to queue
-ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192, NOORDERINVERT);
+	// modulate frame + add to queue
+	// do 3 times
+	for (loop=0; loop<3; loop++) {
+		ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 96);
 
-if (ret != C2GMSK_RET_OK) {
-	return (ret);
-}; // end if
+		if (ret != C2GMSK_RET_OK) {
+			return (ret);
+		}; // end if
+	}; // end for
 
 
-// repeat last frame 2 more times
-ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192, NOORDERINVERT);
-if (ret != C2GMSK_RET_OK) {
-	return (ret);
-}; // end if
-
-ret=c2gmskabuff48k_modulatebits(sessid, outbuffer, 192, NOORDERINVERT);
-if (ret != C2GMSK_RET_OK) {
-	return (ret);
-}; // end if
+}; // end else - if
 
 // change state: send change state message
 ret=queue_m_msg_2(sessid,C2GMSK_MSG_STATECHANGE,1,0); // move from state 1 to 0
@@ -314,27 +416,43 @@ if (ret != C2GMSK_RET_OK) {
 
 // version and mode check:
 
-// As c2gmsk_mod_init is called from sess_new, is it not said that modulation
+// As c2gmsk_mod_init is called from sess_new, is it not said that modulation type
 // is actually used.
 // In this part of the code, the version/mode check is only done if either is enabled
 // the check if the modulation is enabled is done in "mod_start"
 
-if ((param->m_version >= 0) || (param->m_bitrate >= 0)) {
-	// check version, currently only version 0 is supported
-	// version 0: versionid = 0x27f301
-	if (param->m_version != 0) {
-		return(C2GMSK_RET_UNSUPPORTEDVERSIONID);
-	}; // end if
+if ((param->m_version < 0) || (param->m_version > 15)) {
+	return(C2GMSK_RET_UNSUPPORTEDVERSIONID);
+}; // end if
 
-	// currenly, only 4800 bps is supported
-	if (param->m_bitrate != C2GMSK_MODEMBITRATE_4800) {
-		return(C2GMSK_RET_UNSUPPORTEDMODEMBITRATE);
-	}; // end if
+if ((param->m_bitrate != C2GMSK_MODEMBITRATE_2400) && (param->m_bitrate != C2GMSK_MODEMBITRATE_4800)) {
+	return(C2GMSK_RET_UNSUPPORTEDMODEMBITRATE);
+}; // end if
+
+
+// here using "ret" as tempory var for version/rate id
+ret=(param->m_bitrate<<NUMVERSID_SHIFT)+param->m_version;
+
+// current supported combinations: (bitrate = 4800, versionid = 0) and (bitrate = 2400, versionid = 15)
+if ((ret != 0x001f) && (ret != 0x0020)) {
+	return(C2GMSK_RET_UNSUPPORTEDVERSIONID);
 }; // end if
 
 // copy parameters from param to session vars
 sessid->m_version=param->m_version;
 sessid->m_bitrate=param->m_bitrate;
+// combined version / rate 
+sessid->m_versrate=ret;
+
+// demodulation bitrate is set to the same as modulation bitrate
+sessid->d_bitrate=param->m_bitrate;
+
+// set size of 40 ms frame
+if (param->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+	sessid->framesize40ms=12; // 40 ms @ 2400 bps = 96 bits = 12 octets
+} else {
+	sessid->framesize40ms=24; // 40 ms @ 4800 bps = 192 bits = 24 octets
+}; // end else - if
 
 // init all other modulator-related vars
 sessid->m_state=0;
@@ -397,22 +515,37 @@ if (ret != C2GMSK_RET_OK) {
 
 
 // send sync pattern
-// everything is bitorder-inverted
-ret=c2gmskabuff48k_modulatebits(sessid, codec2_startsync_pattern, sizeof(codec2_startsync_pattern)<<3, ORDERINVERT);
+assert ((sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) || (sessid->m_bitrate == C2GMSK_MODEMBITRATE_4800));
+if (sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+	ret=c2gmskabuff48k_modulatebits(sessid, codec2_startsync_pattern_2400, sizeof(codec2_startsync_pattern_2400)<<3);
+} else {
+	ret=c2gmskabuff48k_modulatebits(sessid, codec2_startsync_pattern_4800, sizeof(codec2_startsync_pattern_4800)<<3);
+}; // end else - if
 
 if (ret != C2GMSK_RET_OK) {
 	return (ret);
 }; // end if
 
-// send versionid (0, code 0x27f301), NON inverted
+
+// send versionid NON inverted
 // copy octet per octet to be endian-independant
 
-versionid[0]=(char)(c2gmsk_idcode_4800[sessid->m_version] & 0xff);
-versionid[1]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff00) >> 8);
-versionid[2]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff0000) >> 16);
+assert((sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400)  || (sessid->m_bitrate == C2GMSK_MODEMBITRATE_4800));
+
+if (sessid->m_bitrate == C2GMSK_MODEMBITRATE_4800) {
+	// 4800 bps modem
+	versionid[0]=(char)(c2gmsk_idcode_4800[sessid->m_version] & 0xff);
+	versionid[1]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff00) >> 8);
+	versionid[2]=(char)((c2gmsk_idcode_4800[sessid->m_version] & 0xff0000) >> 16);
+} else if (sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+	// 2400 bps modem
+	versionid[0]=(char)(c2gmsk_idcode_2400[sessid->m_version] & 0xff);
+	versionid[1]=(char)((c2gmsk_idcode_2400[sessid->m_version] & 0xff00) >> 8);
+	versionid[2]=(char)((c2gmsk_idcode_2400[sessid->m_version] & 0xff0000) >> 16);
+}; // end else - if
 
 // send 24 bits
-ret=c2gmskabuff48k_modulatebits(sessid, versionid, 24, NOORDERINVERT);
+ret=c2gmskabuff48k_modulatebits(sessid, versionid, 24);
 
 if (ret != C2GMSK_RET_OK) {
 	return(ret);
@@ -526,6 +659,10 @@ sessid->dd_dem_init=1;
 // for "firfilter_demodulate"
 sessid->dd_filt_init=1;
 
+// for predecimator filter
+sessid->dd_predecfilt_init=1;
+
+
 ret=queue_debug_bit_init(sessid);
 if (ret != C2GMSK_RET_OK) {
 	return(ret);
@@ -548,6 +685,10 @@ int16_t *samplepointer;
 int16_t audiosample;
 int bit;
 int bitmatch;
+int thisbitrate;
+int thisversrate;
+
+char allzero[7];
 
 // sanity checks
 ret=checksign_sess(sessid);
@@ -591,10 +732,18 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+// init "thisbitrate". Now fixed to same bitrate as modulator
+// will possibly be replaced by auto-bitrate detection code
+// later on
+thisbitrate=sessid->m_bitrate;
+
 
 // demodulation return value.
 // init to OK
 demod_retval=C2GMSK_RET_OK;
+
+// create "all empty" (used for detecting end-frames)
+memset(allzero,0,7);
 
 
 // calculate average value of sampleblock
@@ -692,8 +841,12 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 
 	// demodulate and get bit
-	bit=demodulate(sessid,audiosample);
-
+	assert((sessid->d_bitrate==C2GMSK_MODEMBITRATE_2400) || (sessid->d_bitrate==C2GMSK_MODEMBITRATE_4800));
+	if (sessid->d_bitrate==C2GMSK_MODEMBITRATE_2400) {
+		bit=demodulate_2400(sessid,audiosample);
+	} else {
+		bit=demodulate_4800(sessid,audiosample);
+	}; // end else - if
 
 	// the demodulate function returns three possible values:
 	// -1: not a valid bit
@@ -933,20 +1086,41 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 		// min distance is send as pointer as it also returns the distance between the assumed-found id
 		mindistance=3; // minimal distance requisted
-		thisversionid=findbestmatch(versionidreceived, c2gmsk_idcode_4800, 16, 0xffffff, &mindistance);
-		// mindistance now contains minimum distance found
 
+		assert((sessid->d_bitrate == C2GMSK_MODEMBITRATE_2400)  || (sessid->d_bitrate == C2GMSK_MODEMBITRATE_4800));
+		if (sessid->d_bitrate == C2GMSK_MODEMBITRATE_2400) {
+			// 2400 bps modem
+			thisversionid=findbestmatch(versionidreceived, c2gmsk_idcode_2400, 16, 0xffffff, &mindistance);
+		} else {
+			// 4800 bps modem
+			thisversionid=findbestmatch(versionidreceived, c2gmsk_idcode_4800, 16, 0xffffff, &mindistance);
+		}; // end else - if (bitrate)
+
+		// mindistance now contains minimum distance found
 		
 		// send debug message: 4 elements: found versionid, receivedversionid, code of selected versionid, distance
-		ret=queue_d_msg_4(sessid, C2GMSK_MSG_VERSIONID, thisversionid, versionidreceived, c2gmsk_idcode_4800[thisversionid],mindistance);
+		if (sessid->d_bitrate == C2GMSK_MODEMBITRATE_2400) {
+			ret=queue_d_msg_4(sessid, C2GMSK_MSG_VERSIONID, thisversionid, versionidreceived, c2gmsk_idcode_2400[thisversionid],mindistance);
+		} else {
+			ret=queue_d_msg_4(sessid, C2GMSK_MSG_VERSIONID, thisversionid, versionidreceived, c2gmsk_idcode_4800[thisversionid],mindistance);
+		}; // end else - if
+		if (ret != C2GMSK_RET_OK) {
+			return(ret);
+		}; // end if
+
+		// send debug message: 1 element: bitrate
+		ret=queue_d_msg_1(sessid, C2GMSK_MSG_BITRATE, sessid->d_bitrate);
 		if (ret != C2GMSK_RET_OK) {
 			return(ret);
 		}; // end if
 
 
+		thisversrate=(thisbitrate<<NUMVERSID_SHIFT)+thisversionid;
+
+
 		// check version
-		// currently only versionid "0x11" is accepted (speed "1", mode "1");
-		if (thisversionid != 0) {
+		// currently only versionid "0x20" (speed 4800, version "0") or "0x1f" (speed 2400, version "15") are accepted
+		if ((thisversrate != 0x20) && (thisversrate != 0x1f)){
 			// unknown version id
 			ret=queue_d_msg_0(sessid, C2GMSK_MSG_UNKNOWNVERSIONID);
 
@@ -968,6 +1142,12 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			// next bit
 			continue;
 		}; // end if (not a valid version id)
+
+		// store versionid / bitrate information
+		sessid->d_version=thisversionid;
+		sessid->d_bitrate=thisbitrate;
+		// combined var
+		sessid->d_versrate=(thisbitrate<<NUMVERSID_SHIFT)+thisversionid;
 
 
 		// OK, we have a valid state. Go to new state: 22 (codec2 data frame)
@@ -1020,6 +1200,10 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 	// STATE 22
 	///////////////////////////////////
 	if (sessid->d_state == 22) {
+		// some tempory vars
+		unsigned char codec2inframe2[12]; // temprory buffer to store codec2 input frame, used for scrambling using modem 2400/15
+		int scramblestart=0; // used for modem 2400/15
+
 		// state 22: main part of codec2 stream
 
 		// reading the main part of the stream
@@ -1143,9 +1327,11 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 				
 
 		// state 22, part 2: receiving bits 32 up to the end
+		// 24 octets (192 bits) for 4800 bps
+		// 12 octets (96 bits) for 2400 bps
 
 		// some sanity checking
-		assert(sessid->d_octetcount <= 23);
+		assert(sessid->d_octetcount <= sessid->framesize40ms);
 
 
 		if (bit) {
@@ -1158,13 +1344,12 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			sessid->d_bitcount=0;
 		}; // end if
 
-		// go to next bit if not yet 192 bits received
-		if (sessid->d_octetcount <= 23) {
+		// go to next bit if not yet all bits received
+		if (sessid->d_octetcount < sessid->framesize40ms) {
 			continue;
 		}; // end if
 
-
-		// we have received all 182 bits of the frame. Let's process
+		// we have received all bits of the frame. Let's process
 		// if no sync found
 		if (!sessid->d_syncfound) {
 			sessid->d_marker='M';
@@ -1179,13 +1364,61 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			return(ret);
 		}; // end if
 
-		// process codec2 frame
-		// 1: apply scrambling
+		// for 2400/15 modem
+		if (sessid->d_versrate == 0x1f) {
+			// if sync pattern is found or end marker is found
+			// reset "framecount" value -> determines what sync pattern to use
+			if ((sessid->d_syncfound) || (sessid->d_endfound)) {
+				sessid->d_framecount=0;
+			}; // end if
+		}; // end if
 
+
+		// step 1: transmission interleaving: only for 2400/15 modem
+		if  (sessid->d_versrate == 0x1f) {
+			// STEP 1: DEINTERLEAVE BITS FOR TRANSMISSION
+
+			if (sessid->d_framecount) {
+				// framecount != 0 -> no sync
+				interleaveTX_rx(sessid->d_codec2inframe,codec2inframe2,0);
+			} else {
+				// framecount == 0 -> sync
+				interleaveTX_rx(sessid->d_codec2inframe,codec2inframe2,1);
+			}; 
+
+		};
+
+
+		// step 2: scrambling
 		// we have up to 8 lines of known exor-patterns
 		sessid->d_framecount &= 0x7;
 
-		{
+		if  (sessid->d_versrate == 0x1f) {
+		// 2400/15 modem
+			unsigned char *c1, *c2;
+			
+			// no sync: scrambling starts from the 1st char
+			if (sessid->d_framecount) {
+				scramblestart=0;
+			} else {
+			// if framecount is 0 (where sync is supposed to be present), start scrambling at 4th char, not first
+				scramblestart=3;
+			}; // end else - if
+
+			// do actual scrambling
+			c1=&scramble_exor[sessid->d_framecount][scramblestart];
+			// descramblink chars (O or 3) up to 12 (starting at 0)
+			c2=&codec2inframe2[scramblestart];
+
+			// descramble 9 or 12 chars
+			for (loop=scramblestart; loop < 12; loop++) {
+				*c2 ^= *c1;
+				c2++; c1++;
+			}; // end for
+
+
+		} else  {
+		// 4800/0 modem
 			unsigned char *c1, *c2;
 
 			c1=&scramble_exor[sessid->d_framecount][0];
@@ -1200,64 +1433,110 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 		}; 
 
+
+		// step 3
+		// invert bits if audio is inverted.
+		// done now so FEC and FEC deinterleaving is not misled
+		// only done for 2400/15 modem
+
+
+//		// invert if needed
+		if (sessid->d_inaudioinvert) {
+			if (sessid->d_versrate == 0x1f) {
+				// 2400/15 modem
+				for (loop=0; loop<12; loop++) {
+					sessid->d_codec2frame[loop] ^= 0xff;
+				}; // end for
+			} else {
+				// 4800/0 modem
+				for (loop=0; loop<24; loop++) {
+					sessid->d_codec2frame[loop] ^= 0xff;
+				}; // end for
+			}; // end if
+		}; // end if (audioinvert)
+		
+
+		// Step 4: apply FEC + inner interleaving
+
+		// do not apply to "endmarker" data (all empry anyway)
+		if (sessid->d_versrate == 0x20) {
+			// 4800 bps modem
+			unsigned char *p1, *d;
+
+			int totalerror=0;
+			int error_8bit=0;
+
+			p1=&sessid->d_codec2inframe[3];
+			// destination is codec2frame. Point to beginning of struct, then go up one position per loop
+			d=sessid->d_codec2frame;
+
+			for (loop=0; loop < 7; loop++) {
+				error_8bit = fec13decode_8bit(*p1,sessid->d_codec2inframe[interl2[loop]],sessid->d_codec2inframe[interl3[loop]],d);
+				if (error_8bit) {
+					totalerror += count1s_8bit(error_8bit);
+				}; // end if
+				p1++; d++;
+			}; // end for
+
+			ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, totalerror ); // total error
+
+			if (ret != C2GMSK_RET_OK) {
+				return(ret);
+			}; // end if
+		} else {
+			// 2400 bps modem
+
+////////////
+			// TO DO ///
+			// add code for FEC
+////////////
+
+			// deinterleave + copy
+			// use "interleave" function, but set "forward" to 0
+			if (sessid->d_framecount) {
+				// framecount != 0 -> no sync
+				c2_interleave_2400_1400((uint8_t*)codec2inframe2,sessid->d_codec2frame,0,0);
+			} else {
+				// framecount == 0 -> sync
+				// data starts at 3th char
+				c2_interleave_2400_1400((uint8_t*)&codec2inframe2[3],sessid->d_codec2frame,1,0);
+			}; // end if
+
+
+
+
+		}; // end else - if
+
 		// increase framecounter; no need to do boundary check, happens above
 		sessid->d_framecount++;
 
-         // 2: apply FEC and interleaving
-         {
-            unsigned char *p1, *d;
 
-            int totalerror=0;
-				int error_8bit=0;
+		// final part
+		// 3 possible senario:
+		// - to many missed sync: just stop
+		// - endfound: send final frame and stop
+		// other: send frame
+		{
+		int maxmissed;
 
-            p1=&sessid->d_codec2inframe[3];
-            // destination is codec2frame. Point to beginning of struct, then go up one position per loop
-            d=sessid->d_codec2frame;
-
-              for (loop=0; loop < 7; loop++) {
-                 error_8bit = fec13decode_8bit(*p1,sessid->d_codec2inframe[interl2[loop]],sessid->d_codec2inframe[interl3[loop]],d);
-                 if (error_8bit) {
-                    totalerror += count1s_8bit(error_8bit);
-                 }; // end if
-                 p1++; d++;
-              }; // end for
-
-					ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, totalerror ); // total error
-
-					if (ret != C2GMSK_RET_OK) {
-						return(ret);
-					}; // end if
-         }; // FEC + interleaving
+			if (sessid->d_versrate == 0x20) {
+				// modem 4800/0: break out after 20 missed
+				maxmissed=20;
+			} else {
+				// modem 2400/15: break out after 50 missed (as sync is only send every 8 frames)
+				maxmissed=50;
+			}; // end else - if
 
 
-         // frame received, now invert if needed
-         if (sessid->d_inaudioinvert) {
-            for (loop=0; loop<7; loop++) {
-               sessid->d_codec2frame[loop] ^= 0xff;
-            }; // end for
-         }; // end if
-
-
-         // 3 possible senario:
-         // - to many missed sync: just stop
-         // - endfound: send final frame and stop
-         // other: send frame
-
-         if (sessid->d_missedsync < 20) {
-            // send frame
+			if (sessid->d_missedsync < maxmissed) {
+				// send frame
 				c2gmsk_msg_codec2 msg;
 
-				char allempty[7];
-
-
 				// additional test: if end is found, and frame is all-zero, this is a empty end-of-stream frame. No need to send if
-				memset(allempty,0,7);
-
-				if ((sessid->d_endfound==0) || (memcmp(allempty,sessid->d_codec2frame,7))) {
-
+				if ((sessid->d_endfound==0) || (memcmp(allzero,sessid->d_codec2frame,7))) {
 					msg.tod=C2GMSK_MSG_CODEC2;
 					msg.datasize=sizeof(msg) - sizeof(struct c2gmsk_msg); // should be "7", however, due to work-alligment rules, it can be larger
-																					// so use "size" functions to be platform independant
+																							// so use "size" functions to be platform independant
 					msg.realsize=C2GMSK_CODEC2_FRAMESIZE_1400;
 					msg.version=C2GMSK_CODEC2_1400;
 					memcpy(msg.c2data,sessid->d_codec2frame,C2GMSK_CODEC2_FRAMESIZE_1400); // copy 7 octets
@@ -1268,27 +1547,29 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 						return(ret);
 					}; // end if
 				}; // end if: not (end and all-empty)
-         }; // end if
+			}; // end if
 
 
-         // print out messages (if needed)
-         if (sessid->d_endfound)  {
+			// send "end of stream" message if end found
+			if (sessid->d_endfound)  {
 				ret=queue_d_msg_0(sessid,C2GMSK_MSG_END_NORMAL); // normal end
 
 				if (ret != C2GMSK_RET_OK) {
 					return(ret);
 				}; // end if
-         }; // end if
+			}; // end if
 
-         if (sessid->d_missedsync >= 20) {
+			// break out of stream if to many missed sync
+			if (sessid->d_missedsync >= maxmissed) {
 				ret=queue_d_msg_0(sessid,C2GMSK_MSG_END_TOMANYMISSEDSYNC); // normal end
-
+	
 				if (ret != C2GMSK_RET_OK) {
 					return(ret);
 				}; // end if
 
-            sessid->d_endfound=1;
-         }; // end if
+				sessid->d_endfound=1;
+			}; // end if
+
 
          // things to do at end of frame
 
@@ -1299,10 +1580,8 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
          // clear memory for new frame
          memset(sessid->d_codec2inframe,0,24);
 
-
          // reset counters of printbit function
 			ret=queue_debug_bit_flush(sessid);
-
 			if (ret != C2GMSK_RET_OK) {
 				return(ret);
 			}; // end if
@@ -1331,7 +1610,9 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
          // get next audio-frame to look for new stream
          continue;
-      }; // end if (state 22)
+		}; // end  final part
+
+	}; // end if (state 22)
 
 }; // end for (sampleloop)
 

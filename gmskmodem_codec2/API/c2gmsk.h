@@ -68,6 +68,7 @@
 #define C2GMSK_MSG_INAUDIOINVERT 0x32
 #define C2GMSK_MSG_VERSIONID 0x33
 #define C2GMSK_MSG_FECSTATS 0x34
+#define C2GMSK_MSG_BITRATE 0x35
 
 // data types used for "printbit"
 #define C2GMSK_PRINTBIT_MOD 0x40

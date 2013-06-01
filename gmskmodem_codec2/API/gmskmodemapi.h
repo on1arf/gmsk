@@ -3,6 +3,7 @@
 // version 20130122: initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130507: support for 2400bps/versid15 modem
 
 
 
@@ -83,6 +84,7 @@ char *c2gmsk_str_msg[C2GMSK_MSG_HIGHEST+1];
 #define C2GMSK_MSG_INAUDIOINVERT 0x32
 #define C2GMSK_MSG_VERSIONID 0x33
 #define C2GMSK_MSG_FECSTATS 0x34
+#define C2GMSK_MSG_BITRATE 0x35
 
 // data types used for "printbit"
 #define C2GMSK_PRINTBIT_MOD 0x40
@@ -281,9 +283,10 @@ struct c2gmsk_session {
 	unsigned char signature[4]; // contains signature
 
 
-	// parameters for the modulator
+	// parameters for bitrate and versionid (modulator)
 	int m_bitrate;
 	int m_version;
+	int m_versrate; // combined data element of versionid and bitrate, easier to code
 
 	// data for modulator
 	struct c2gmsk_msgchain * m_chain;
@@ -306,15 +309,20 @@ struct c2gmsk_session {
 #endif
 
 
-
 	// parameters for demodulator
 	int d_disableaudiolevelcheck;
+
 
 	// data for demodulator
 	struct c2gmsk_msgchain * d_chain; 
 
 	int d_state;
 	int d_audioinvert;
+
+	// bitrate and versionid (demodulator)
+	int d_bitrate;
+	int d_version;
+	int d_versrate; // combined data element of versionid and bitrate, easier to code
 
 	// maxaudiolevel check disabled (see note in gmskmodemapi.c)
 	// int d_maxaudiolevelvalid;
@@ -356,6 +364,7 @@ struct c2gmsk_session {
 	int dd_dem_init;
 	int dd_dem_last;
 	int dd_dem_m_pll;
+	int dd_dem_bitselect;
 
 	// for firfilter_demodulate
 	int dd_filt_init;
@@ -368,6 +377,18 @@ struct c2gmsk_session {
 	int16_t *dd_filt_buffer;
 #endif
 
+	// for decimator filter for demodulator
+	int dd_predecfilt_init;
+	int dd_predecfilt_pointer;
+
+#if _USEFLOAT == 1
+	float *dd_predecfilt_buffer;
+#else
+	int16_t *dd_predecfilt_buffer;
+#endif
+
+	// used for both modulator and demodulator
+	int framesize40ms;
 };
 
 

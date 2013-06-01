@@ -20,6 +20,7 @@
 // version 20130310: API release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130506: add support for 2400 baud
 
 
 int16_t process_return (int64_t filterret) {
@@ -78,63 +79,127 @@ if (ret != C2GMSK_RET_OK) {
 
 // check audioret
 assert(audioret != NULL);
-
 p=audioret;
 
-// send 10 audio-samples to firfilter per bit
-if (bit) {
-// bit = 1 -> send -16384 to firfilter
-	for (loop=0; loop<10; loop++) {
+assert((sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) || (sessid->m_bitrate == C2GMSK_MODEMBITRATE_4800));
+if (sessid->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+// 2400 bps: 20 samples / bit
+
+	// send 20 audio-samples to firfilter per bit
+	if (bit) {
+	// bit = 1 -> send -16384 to firfilter
+		for (loop=0; loop<20; loop++) {
 #if _USEFLOAT == 1
-		ret16=(int)(firfilter_modulate(sessid, -16384));
+			ret16=(int)(firfilter_modulate_2400(sessid, -16384));
 #else
 #if _INTMATH == 64
-		// 16 bit audio
-		filterret=firfilter_modulate(sessid, -16384);
-		ret16=process_return(filterret);
+			// 16 bit audio
+			filterret=firfilter_modulate_2400(sessid, -16384);
+			ret16=process_return(filterret);
 #else
 #if _INTMATH == 3212
-		// 12 bit audio
-		ret16=(firfilter_modulate(sessid, -1024)>> 16);
+			// 12 bit audio
+			ret16=(firfilter_modulate_2400(sessid, -1024)>> 16);
 #else
-		// mathint 32_10
-		// 10 bit audio
-		ret16=(firfilter_modulate(sessid, -256)>> 16);
+			// mathint 32_10
+			// 10 bit audio
+			ret16=(firfilter_modulate_2400(sessid, -256)>> 16);
 #endif
 #endif
 #endif
 
-		// store data
-		*p=ret16;
-		p++;
-	}; // end for
-} else {
+			// store data
+			*p=ret16;
+			p++;
+		}; // end for
+	} else {
 // bit = 0 -> send +16384 to firfilter
-	for (loop=0; loop<10; loop++) {
+		for (loop=0; loop<20; loop++) {
 #if _USEFLOAT == 1
-		ret16=(int)(firfilter_modulate(sessid, 16384));
+			ret16=(int)(firfilter_modulate_2400(sessid, 16384));
 #else
 #if _INTMATH == 64
-		// 16 bit audio
-		filterret=firfilter_modulate(sessid, 16384);
-		ret16=process_return(filterret);
+			// 16 bit audio
+			filterret=firfilter_modulate_2400(sessid, 16384);
+			ret16=process_return(filterret);
 #else 
 #if _INTMATH == 3212
-		// 12 bit audio
-		ret16=(firfilter_modulate(sessid, 1024)>> 16);
+			// 12 bit audio
+			ret16=(firfilter_modulate_2400(sessid, 1024)>> 16);
 #else
-		// mathint 32_10
-		// 10bit audio
-		ret16=(firfilter_modulate(sessid, 256)>> 16);
+			// mathint 32_10
+			// 10bit audio
+			ret16=(firfilter_modulate_2400(sessid, 256)>> 16);
 #endif
 #endif
 #endif
 
-		// store data
-		*p=ret16;
-		p++;
-	}; // end for
-}; // end if
+			// store data
+			*p=ret16;
+			p++;
+		}; // end for
+	}; // end if
+
+
+} else {
+// 4800bps: 10 samples / bit
+
+	// send 10 audio-samples to firfilter per bit
+	if (bit) {
+	// bit = 1 -> send -16384 to firfilter
+		for (loop=0; loop<10; loop++) {
+#if _USEFLOAT == 1
+			ret16=(int)(firfilter_modulate_4800(sessid, -16384));
+#else
+#if _INTMATH == 64
+			// 16 bit audio
+			filterret=firfilter_modulate_4800(sessid, -16384);
+			ret16=process_return(filterret);
+#else
+#if _INTMATH == 3212
+			// 12 bit audio
+			ret16=(firfilter_modulate_4800(sessid, -1024)>> 16);
+#else
+			// mathint 32_10
+			// 10 bit audio
+			ret16=(firfilter_modulate_4800(sessid, -256)>> 16);
+#endif
+#endif
+#endif
+
+			// store data
+			*p=ret16;
+			p++;
+		}; // end for
+	} else {
+// bit = 0 -> send +16384 to firfilter
+		for (loop=0; loop<10; loop++) {
+#if _USEFLOAT == 1
+			ret16=(int)(firfilter_modulate_4800(sessid, 16384));
+#else
+#if _INTMATH == 64
+			// 16 bit audio
+			filterret=firfilter_modulate_4800(sessid, 16384);
+			ret16=process_return(filterret);
+#else 
+#if _INTMATH == 3212
+			// 12 bit audio
+			ret16=(firfilter_modulate_4800(sessid, 1024)>> 16);
+#else
+			// mathint 32_10
+			// 10bit audio
+			ret16=(firfilter_modulate_4800(sessid, 256)>> 16);
+#endif
+#endif
+#endif
+
+			// store data
+			*p=ret16;
+			p++;
+		}; // end for
+	}; // end if
+
+}; // end else - if
 
 return(C2GMSK_RET_OK);
 

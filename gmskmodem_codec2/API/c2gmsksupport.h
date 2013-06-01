@@ -330,6 +330,7 @@ switch (msg->tod) {
 	case C2GMSK_MSG_AUDIOAVGLEVEL:
 	case C2GMSK_MSG_INAUDIOINVERT:
 	case C2GMSK_MSG_FECSTATS:
+	case C2GMSK_MSG_BITRATE:
 		{
 		c2gmsk_msg_1 * msg1;
 
