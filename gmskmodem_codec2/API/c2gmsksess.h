@@ -151,6 +151,7 @@ if (ret2 != C2GMSK_RET_OK) {
 }; // end if
 
 
+
 // return message queue
 *out=newsessid->m_chain;
 

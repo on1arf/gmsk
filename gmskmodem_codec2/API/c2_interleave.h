@@ -1,7 +1,8 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// version 4800/0 (versionid 0x27f301): 1/3 repetition code FEC
+// version 2400/15
 
 
 /*
@@ -22,6 +23,7 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+
 
 // interleave_c2.h
 

@@ -42,9 +42,12 @@ all:	gmskmodemapi
 test:	apitest_modulate_2400 apitest_modulate_4800 apitest_demodulate_2400 apitest_demodulate_4800
 
 	
-gmskmodemapi: Makefile gmskmodemapi.c gmskmodemapi.h a_dspstuff_4800.h a_dspstuff_2400.h a_gmskmodulate.h  countdiff.h c2gmskchain.h c2gmskabuff.h c2gmsksess.h c2gmskprintbit.h c2gmskdebugmsg.h c2gmsksupport.h c2gmskstr.h c2gmskmodulate.h c2_interleave.h c2_scramble.h c2_fec.h 
+gmskmodemapi: Makefile gmskmodemapi.c gmskmodemapi.h a_dspstuff_4800.h a_dspstuff_2400.h a_gmskmodulate.h  countdiff.h c2gmskchain.h c2gmskabuff.h c2gmsksess.h c2gmskprintbit.h c2gmskdebugmsg.h c2gmsksupport.h c2gmskstr.h c2gmskmodulate.h c2_interleave.h c2_scramble.h c2_fec.h golay23.o
 	gcc -O2 -fPIC -D_USEFLOAT=$(USEFLOAT) -D_INTMATH=$(INTMATH) -c -Wall gmskmodemapi.c
-	gcc -shared -Wl,-soname,libc2gmsk.so.0 -o libc2gmsk.so.0.0.0 gmskmodemapi.o
+	gcc -shared -Wl,-soname,libc2gmsk.so.0 -o libc2gmsk.so.0.0.0 gmskmodemapi.o golay23.o
+
+golay23.o: golay23.c golay23.h
+	gcc -O2 -c -Wall -o golay23.o golay23.c
 
 install:
 	install -o root -g root -m 755 libc2gmsk.so.0.0.0 /usr/lib

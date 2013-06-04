@@ -102,9 +102,8 @@
 #include "c2_scramble.h" // scramble matrix for 1400 bps voice
 #include "c2_fec.h" // fec1/3 repetition code
 
-
-
-
+// for golay FEC
+#include "golay23.h"
 ///////////////////////////////////////////////
 //// MODULATION CHAIN:
 //// c2gmsk_mod_init
@@ -213,12 +212,19 @@ if (sessid->m_versrate == 0x0020) {
 		c2_interleave_2400_1400(c2dataframe,outbuffer,0,1);
 		scramblestart=0;
 
-// TO DO //
-///////////
-		// add code to apply FEC
-///////////
+		// apply FEC
+		// frame without SYNC
+		// bits 12 to 23 are golay code for bits  0 to 11
+		// bits 36 to 47 are golay code for bits 24 to 35
+		// bits 60 to 71 are golay code for bits 48 to 59
+
+		golay23_encode(outbuffer); // bits 0 to 23
+		golay23_encode(&outbuffer[3]); // bits 24 to 47
+		golay23_encode(&outbuffer[6]); // bits 48 to 71
+		
+
 	} else {
-		// first frame of group of 8: do sync
+		// first frame of group of 8: include sync
 
 		// copy sync pattern to first 3 octets
 		outbuffer[0]=0xe7; outbuffer[1]=0x08; outbuffer[2]=0x5c;
@@ -226,6 +232,13 @@ if (sessid->m_versrate == 0x0020) {
 		// copy and interleave voice bits
 		c2_interleave_2400_1400(c2dataframe,&outbuffer[3],1,1);
 		scramblestart=3;
+
+
+		// apply FEC
+		// frame with SYNC
+		// bits 36 to 47 are golay code for bits  0 to 11 (first part after sync)
+		golay23_encode(&outbuffer[3]); // bits 0 to 24
+
 	}; // end else - if
 
 	// STEP 3: SCRAMBLING
@@ -458,7 +471,6 @@ if (param->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
 sessid->m_state=0;
 sessid->m_v1400_framecounter=0;
 sessid->md_filt_init=1;
-
 
 // done
 return(C2GMSK_RET_OK);
@@ -769,6 +781,7 @@ if (ret != C2GMSK_RET_OK) {
 }; // end if
 
 
+
 // store audio average audio-level in ringbuffer, to be used later on to
 // detect false-positive start-or-stream
 
@@ -832,6 +845,7 @@ sessid->d_audioleveltable[sessid->d_audiolevelindex]=sessid->d_audioaverage;
 samplepointer=in;
 
 for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
+
 
 	// get audio
 	audiosample = *samplepointer;
@@ -1442,17 +1456,21 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 //		// invert if needed
 		if (sessid->d_inaudioinvert) {
+			unsigned char *p;
+			int n;
+
 			if (sessid->d_versrate == 0x1f) {
 				// 2400/15 modem
-				for (loop=0; loop<12; loop++) {
-					sessid->d_codec2frame[loop] ^= 0xff;
-				}; // end for
+				p=codec2inframe2;
+				n=12;
 			} else {
-				// 4800/0 modem
-				for (loop=0; loop<24; loop++) {
-					sessid->d_codec2frame[loop] ^= 0xff;
-				}; // end for
-			}; // end if
+				p=sessid->d_codec2frame;
+				n=24;
+			}; // end else - if
+
+			for (loop=0; loop<n; loop++) {
+				*p ^= 0xff; p++;
+			}; // end for
 		}; // end if (audioinvert)
 		
 
@@ -1486,24 +1504,54 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 		} else {
 			// 2400 bps modem
 
-////////////
-			// TO DO ///
-			// add code for FEC
-////////////
-
 			// deinterleave + copy
 			// use "interleave" function, but set "forward" to 0
 			if (sessid->d_framecount) {
+				int numerrors;
+
+				// apply FEC:
+				// frame without SYNC
+				// bits 12 to 23 are golay code for bits  0 to 11
+				// bits 36 to 47 are golay code for bits 24 to 35
+				// bits 60 to 71 are golay code for bits 48 to 59
+
+				numerrors=golay23_decode(codec2inframe2); // bits 0 to 23
+				ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, numerrors ); // total error
+				if (ret != C2GMSK_RET_OK) {
+					return(ret);
+				}; // end if
+
+				numerrors=golay23_decode(&codec2inframe2[3]); // bits 24 to 47
+				ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, numerrors ); // total error
+				if (ret != C2GMSK_RET_OK) {
+					return(ret);
+				}; // end if
+
+				numerrors=golay23_decode(&codec2inframe2[6]); // bits 48 to 71
+				ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, numerrors ); // total error
+				if (ret != C2GMSK_RET_OK) {
+					return(ret);
+				}; // end if
+
 				// framecount != 0 -> no sync
 				c2_interleave_2400_1400((uint8_t*)codec2inframe2,sessid->d_codec2frame,0,0);
 			} else {
+				int numerrors;
+
 				// framecount == 0 -> sync
+				// apply FEC
+				// frame with SYNC
+				// bits 36 to 47 are golay code for bits  0 to 11 (first data element after sync pattern)
+				numerrors=golay23_decode(&codec2inframe2[3]); // bits 0 to 23
+				ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, numerrors ); // total error
+				if (ret != C2GMSK_RET_OK) {
+					return(ret);
+				}; // end if
+
+
 				// data starts at 3th char
 				c2_interleave_2400_1400((uint8_t*)&codec2inframe2[3],sessid->d_codec2frame,1,0);
 			}; // end if
-
-
-
 
 		}; // end else - if
 
