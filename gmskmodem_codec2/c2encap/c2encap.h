@@ -1,9 +1,29 @@
-// c2udp
+// c2encap.h
+
+
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+// version 20121011: initial release
+// version 20130606: license changed from GPL to LPLG
+
+
 
 // structures used to transport raw codec2 streams over pipes, TCP or UDP
 
 // C2ENCAP VERSION
-#define C2ENCAP_VERSION 210121011
+#define C2ENCAP_VERSION 20121011
 
 // c2encap-frames at the first 3 octets 0x36f162
 // 4th octet is type of data, divided in 2 times 4 bits

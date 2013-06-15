@@ -1,3 +1,22 @@
+// audiotool.c
+
+
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+
+
 /* audio capture and playback */
 
 // received C2encap frames from a UDP socket
@@ -9,21 +28,7 @@
 // version 20121222: initial release
 // version 20130404: added half duplex support
 // version 20130415: minor bugfixes
-
-/*
- *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
-
-
+// version 20130606: changed license to LGPL
 
 
 //////////////////// CONFIGURATION: CHANGE BELOW 
