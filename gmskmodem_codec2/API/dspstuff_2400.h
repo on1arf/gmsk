@@ -1,5 +1,5 @@
 // DSP related functions and data //
-// "API" version
+// 24000 bps version
 
 
 /*

@@ -1,21 +1,25 @@
+// c2gmsksupport.h
+
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// version 4800/0: 4800 bps, 1/3 repetition code FEC
+// version 2400/15: 2400 bps, golay code FEC
 
 
-/*
- *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
 
 
 // Release information
@@ -326,6 +330,13 @@ if (!data) {
 
 // check changes per type of data
 switch (msg->tod) {
+	// no vars returned
+	case C2GMSK_MSG_NODATA:
+	case C2GMSK_MSG_AUXDATA_DONE:
+		{
+		return(0);
+		}; // done
+
 	// 1 var returned
 	case C2GMSK_MSG_AUDIOAVGLEVEL:
 	case C2GMSK_MSG_INAUDIOINVERT:

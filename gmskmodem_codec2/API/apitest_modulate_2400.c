@@ -82,6 +82,8 @@ int nsample;
 
 unsigned char inbuffer[7];
 
+char * mytext="ABCD1234";
+
 
 // check parameters, we need at least 2 parameters: infile and outfile
 if (argc < 3) {
@@ -96,7 +98,7 @@ if (argc < 3) {
 memset(&silence,0,sizeof(silence));
 
 // open out file
-f_out=open(outfilename,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+f_out=open(outfilename,O_WRONLY|O_CREAT|O_TRUNC,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
 if (f_out < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
@@ -126,7 +128,7 @@ if (ret != C2GMSK_RET_OK) {
 
 // fill in parameter
 // global
-param.expected_apiversion=0;
+param.expected_apiversion=20130606;
 
 // modulation parameters
 param.m_version=15; // version 15 for 2400 bps
@@ -189,6 +191,13 @@ ret=read(f_in, inbuffer,7);
 
 framecount=0;
 while (ret == 7) {
+	int msgcount;
+
+	// send message after frame 3
+	if (framecount == 3) {
+		ret=c2gmsk_auxdata_sendmessage(sessid,mytext,7);
+	};
+
 	// chain is returned via pointer pchain
 	// chain search parameters will automatically be reinitialised
 	nsample=c2gmsk_mod_voice1400(sessid,inbuffer,pchain);
@@ -205,10 +214,21 @@ while (ret == 7) {
 	// number of audio frames is returned in numsample
 	// message number if returned in msgnr
 
-	while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
-		printf("Processing message %d.%d of voice1400\n",framecount,msgnr);
+	msgcount=0;
 
-		write_audio_to_file(f_out, msg);
+	while ((msg = c2gmsk_msgchain_search(C2GMSK_SEARCH_POSCURRENT, chain, &tod, &numsample, NULL))) {
+		
+
+		if (tod == C2GMSK_MSG_PCM48K) {
+			printf("Processing message %d.%d of voice1400\n",framecount,msgcount);
+			write_audio_to_file(f_out, msg);
+		} else if (tod == C2GMSK_MSG_AUXDATA_DONE) {
+			printf("message %d.%d AUXDATA DONE \n",framecount,msgcount);
+		} else {
+			printf("message %d.%d tod %d \n",framecount,msgcount,tod);
+		};
+
+		msgcount++;
 	}; // end while
 
 	ret=read(f_in, inbuffer,7);
@@ -228,6 +248,9 @@ if (ret != C2GMSK_RET_OK) {
 	fprintf(stderr,"Error: c2gmsk_mod_voice1400_end failed: %d \n",ret);
 	exit(-1);
 }; // end if
+
+// we are looking for type-of-message C2GMSK_MSG_PCM48K
+tod=C2GMSK_MSG_PCM48K;
 
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
 	printf("Processing message %d of voice1400_end\n",msgnr);

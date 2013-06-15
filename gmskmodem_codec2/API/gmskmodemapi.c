@@ -2,7 +2,7 @@
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
 // version 4800/0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
-// version 2400/15: 2400 bps, interleave, FEC not implemented
+// version 2400/15: 2400 bps, interleave, FEC
 
 
 // The low-level DSP functions are largly taken from the
@@ -11,21 +11,23 @@
 // More info: http://groups.yahoo.com/group/pcrepeatercontroller
 
 
-/*
- *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
 
 
-// gmskmodemapi.c
+
+// gmskmodemAPI.c
 // main functions of API for modulation and demodulation
 
 // Release information
@@ -33,6 +35,8 @@
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
 // Version 20130506: added 2400 bps modem version 15 (0x1D499B)
+// Version 20130601: added support for golay FEC in modem 2400/15
+// Version 20130606: added support for auxiliary data in modem 2400/15
 
 
 //////////////////////
@@ -69,16 +73,16 @@
 
 
 // global definitions (inherented from non-API version, modified for API)
-#include "a_global.h"
+#include "global.h"
 
 // include definitions
 #include "gmskmodemapi.h"
 
 // functions
 // DSP and low-level related functions (inherented from non-API version, modified for API)
-#include "a_dspstuff_4800.h" // gmsk modulation filters for 4800 bps
-#include "a_dspstuff_2400.h" // gmsk modulation filters for 2400 bps (uses demodulator filter of 4800 bps modem) 
-#include "a_gmskmodulate.h" // modulate1bit
+#include "dspstuff_4800.h" // gmsk modulation filters for 4800 bps
+#include "dspstuff_2400.h" // gmsk modulation filters for 2400 bps (uses demodulator filter of 4800 bps modem) 
+#include "gmskmodulate.h" // modulate1bit
 
 // functions for pattern matching
 #include "countdiff.h"
@@ -104,6 +108,10 @@
 
 // for golay FEC
 #include "golay23.h"
+
+// for auxiliary data
+#include "c2_auxdata.h"
+
 ///////////////////////////////////////////////
 //// MODULATION CHAIN:
 //// c2gmsk_mod_init
@@ -195,14 +203,25 @@ if (sessid->m_versrate == 0x0020) {
 	}; // end if
 
 } else if (sessid->m_versrate == 0x001f) {
+	int ret;
 	// 2400 bps / version 15
 
 	// prepare frame
 	int scramblestart=3;
 
+	// char for auxiliary data
+	unsigned char c;
+
 	// framecount: used to select scrambling pattern and if a sync pattern needs to be send or not
 	// can go from 0 to 7: 
 	sessid->m_v1400_framecounter &= 0x7;
+
+	// char auxdata
+	ret=auxdata_send1(sessid,&c);
+
+	if (ret != C2GMSK_RET_OK) {
+		return(ret);
+	}; // end if
 
 	// STEP 1 and 2: interleaving (for better FEC) + FEC
 	if (sessid->m_v1400_framecounter) {
@@ -223,6 +242,12 @@ if (sessid->m_versrate == 0x0020) {
 		golay23_encode(&outbuffer[6]); // bits 48 to 71
 		
 
+		// store auxdata
+		// not a sync frame, auxdata is at positions 92 to 95
+		// first clear 4 MSB bits (just to be sure), then store data into that place
+		outbuffer[11] &= 0x0f;
+		outbuffer[11] |= ((c & 0x0f) << 4);
+
 	} else {
 		// first frame of group of 8: include sync
 
@@ -237,8 +262,13 @@ if (sessid->m_versrate == 0x0020) {
 		// apply FEC
 		// frame with SYNC
 		// bits 36 to 47 are golay code for bits  0 to 11 (first part after sync)
-		golay23_encode(&outbuffer[3]); // bits 0 to 24
+		golay23_encode(&outbuffer[3]); // bits 24 to 35
 
+		// store auxdata
+		// not a sync frame, auxdata is at positions 68 to 71
+		// first clear 4 MSB bits (just to be sure), then store data into that place
+		outbuffer[8] &= 0x0f;
+		outbuffer[8] |= ((c & 0x0f) << 4);
 	}; // end else - if
 
 	// STEP 3: SCRAMBLING
@@ -276,7 +306,7 @@ if (sessid->m_versrate == 0x0020) {
 
 	sessid->m_v1400_framecounter++; // no need to do range-checking, is done above on next iteration
 
-}; // end if
+}; // end else - if
 
 // point main application to chain
 *out=sessid->m_chain;
@@ -572,6 +602,11 @@ if (ret != C2GMSK_RET_OK) {
 sessid->m_v1400_framecounter=0;
 
 
+// init auxiliary data (sender chain)
+ret=auxdata_sessinit_s(sessid);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
 
 // queue nodata if nothing in queue
 
@@ -682,6 +717,17 @@ if (ret != C2GMSK_RET_OK) {
 
 // init debug messages
 c2gmsk_printstr_init();
+
+// vars for auxiliary data
+sessid->auxdata_r_data=NULL;
+sessid->auxdata_r_buffersize=0;
+sessid->auxdata_r_octetcount=0;
+sessid->auxdata_r_nibble=0;
+
+sessid->auxdata_s_data=NULL;
+sessid->auxdata_s_size=0;
+sessid->auxdata_s_octetcount=0;
+sessid->auxdata_s_nibble=0;
 
 
 return(C2GMSK_RET_OK);
@@ -845,8 +891,6 @@ sessid->d_audioleveltable[sessid->d_audiolevelindex]=sessid->d_audioaverage;
 samplepointer=in;
 
 for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
-
-
 	// get audio
 	audiosample = *samplepointer;
 
@@ -1181,6 +1225,13 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 		memset(sessid->d_codec2inframe,0,24); // clear codec2inframe
 
+		// (re)init auxiliary data (receiver chain)
+		ret=auxdata_sessinit_r(sessid);
+		if (ret != C2GMSK_RET_OK) {
+			return(ret);
+		}; // end if
+
+
 // audiolevel check desabled: d_framesnoise not used
 //		sessid->d_framesnoise=0;
 		sessid->d_framecount=0;
@@ -1452,9 +1503,6 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 		// invert bits if audio is inverted.
 		// done now so FEC and FEC deinterleaving is not misled
 		// only done for 2400/15 modem
-
-
-//		// invert if needed
 		if (sessid->d_inaudioinvert) {
 			unsigned char *p;
 			int n;
@@ -1476,7 +1524,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
 		// Step 4: apply FEC + inner interleaving
 
-		// do not apply to "endmarker" data (all empry anyway)
+		// do not apply to "endmarker" data (all empty anyway)
 		if (sessid->d_versrate == 0x20) {
 			// 4800 bps modem
 			unsigned char *p1, *d;
@@ -1501,6 +1549,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			if (ret != C2GMSK_RET_OK) {
 				return(ret);
 			}; // end if
+			
 		} else {
 			// 2400 bps modem
 
@@ -1514,6 +1563,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 				// bits 12 to 23 are golay code for bits  0 to 11
 				// bits 36 to 47 are golay code for bits 24 to 35
 				// bits 60 to 71 are golay code for bits 48 to 59
+
 
 				numerrors=golay23_decode(codec2inframe2); // bits 0 to 23
 				ret=queue_d_msg_1(sessid,C2GMSK_MSG_FECSTATS, numerrors ); // total error
@@ -1533,7 +1583,13 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 					return(ret);
 				}; // end if
 
-				// framecount != 0 -> no sync
+
+				// auxdata
+				// not a sync frame, auxdata is at positions 92 to 95
+				auxdata_receive1(sessid,(codec2inframe2[11]>>4));
+
+
+				// framecount != 0 -> call deinterleaver with "sync" set to 0
 				c2_interleave_2400_1400((uint8_t*)codec2inframe2,sessid->d_codec2frame,0,0);
 			} else {
 				int numerrors;
@@ -1549,12 +1605,18 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 				}; // end if
 
 
+				// auxdata
+				// sync frame, auxdata is at positions 68 to 71
+				auxdata_receive1(sessid,(codec2inframe2[8]>>4));
+
+				// framecount != 0 -> call deinterleaver with "sync" set to 0
 				// data starts at 3th char
 				c2_interleave_2400_1400((uint8_t*)&codec2inframe2[3],sessid->d_codec2frame,1,0);
 			}; // end if
 
-		}; // end else - if
+		}; // end else - if (modem?)
 
+		
 		// increase framecounter; no need to do boundary check, happens above
 		sessid->d_framecount++;
 
@@ -1619,8 +1681,7 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 			}; // end if
 
 
-         // things to do at end of frame
-
+         // things to do at end of packet
          // re-init vars
          sessid->d_octetcount=0;
          sessid->d_bitcount=0;
@@ -1642,6 +1703,13 @@ for (sampleloop=0; sampleloop < 1920; sampleloop ++) {
 
          // END FOUND!!!
          // things to do at the end of the stream
+
+			// flush auxiliary data
+			ret=auxdata_receive_flush(sessid);
+			if (ret != C2GMSK_RET_OK) {
+				return(ret);
+			}; // end if
+
 
          // reinit vars
          sessid->d_last2octets=0;

@@ -1,21 +1,26 @@
+// c2_fec
+
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// version 4800/0: 4800 bps, 1/3 repetition code FEC
+// version 2400/15: 2400 bps, golay code FEC
 
 
-/*
- *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
+
 
 
 // Release information
@@ -27,7 +32,7 @@
 
 // c2_fec.h
 // Implements a 1/3 FEC decoder based on "best of 3" principle (1/3 repetion code)
-
+// Used in modem version 4800/0
 
 // fec13 decode: old version, compair bit per bit. Not used anymore, just kept as reference 
 //int fec13decode(unsigned char in1, unsigned char in2, unsigned char in3, unsigned char * ret) {

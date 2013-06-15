@@ -95,7 +95,7 @@ if (argc < 3) {
 }; // end else - if
 
 // open out file
-fout=open(outfilename,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+fout=open(outfilename,O_WRONLY|O_CREAT|O_TRUNC,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
 if (fout < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
@@ -199,6 +199,7 @@ while (ret == sizeof(pcmbuffer)) {
 		} else {
 			printf("Processing message %d.%d\n",framecount,msgcount);
 		}; // end else - if
+
 		msgcount++;
 
 	

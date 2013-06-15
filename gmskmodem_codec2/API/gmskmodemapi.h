@@ -4,27 +4,28 @@
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
 // Version 20130507: support for 2400bps/versid15 modem
+// Version 20130606: support for auxiliary data channel
 
 
+/* Copyright (C) 2013 Kristoff Bonne ON1ARF
 
-/*
- *      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
- *
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; version 2 of the License.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- */
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+*/
 
 
 
 // defines
-// version id
-#define C2GMSK_APIVERSION 20130321
+// API version id
+#define C2GMSK_APIVERSION 20130606
 
 
 // signatures of internal data structures
@@ -77,6 +78,8 @@ char *c2gmsk_str_msg[C2GMSK_MSG_HIGHEST+1];
 #define C2GMSK_MSG_CODEC2 0x20
 #define C2GMSK_MSG_PCM8K 0x21
 #define C2GMSK_MSG_PCM48K 0x22
+#define C2GMSK_MSG_AUXDATA 0x23 // received auxdata
+#define C2GMSK_MSG_AUXDATA_DONE 0x24 // sending auxdata is done
 
 // data types used for debug information
 #define C2GMSK_MSG_AUDIOAVGLEVEL 0x30
@@ -233,6 +236,15 @@ typedef struct {
 } c2gmsk_msgrealwithmarker; 
 
 
+// AUXILIARY DATA STRUCTURE
+// structure to return received data from auxiliary data server
+typedef struct {
+	int tod; // type of data
+	int datasize; // whatever site it is, stretched out to next word boundairy
+	int realsize; // real amount of data, excluding padding data for word-boundairy²
+	int complete; // is received data-fragment complete or due to end-of-stream?
+	unsigned char data[];
+} c2gmsk_msgauxdata_txt;
 
 // memory chain structure
 struct c2gmsk_msgchain {
@@ -387,6 +399,17 @@ struct c2gmsk_session {
 	int16_t *dd_predecfilt_buffer;
 #endif
 
+	// data for auxiliary data service
+	char * auxdata_s_data;
+	int auxdata_s_size;
+	int auxdata_s_octetcount;
+	int auxdata_s_nibble;
+
+	char * auxdata_r_data;
+	int auxdata_r_buffersize;
+	int auxdata_r_octetcount;
+	int auxdata_r_nibble;
+
 	// used for both modulator and demodulator
 	int framesize40ms;
 };
@@ -454,6 +477,18 @@ int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff);
 int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t pcmbuff[]);
 int c2gmsk_msgdecode_pcm48k_p (struct c2gmsk_msg * msg, int16_t * pcmbuff[]);
 
-
 // get version
 int c2gmsk_getapiversion ();
+
+// auxiliary data service
+// public API calls
+int c2gmsk_auxdata_sendmessage(struct c2gmsk_session * sessid, char * message, int size);
+// internal functions
+int auxdata_sessinit_s(struct c2gmsk_session * sessid);
+int auxdata_sessinit_r(struct c2gmsk_session * sessid);
+int auxdata_receive1(struct c2gmsk_session * sessid, unsigned char c);
+int auxdata_receive_flush(struct c2gmsk_session * sessid);
+int auxdata_send1(struct c2gmsk_session * sessid, unsigned char * c);
+int queue_d_auxdata(struct c2gmsk_session * sessid, char * txt, int size, int complete);
+
+

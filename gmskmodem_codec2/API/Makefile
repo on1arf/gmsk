@@ -2,22 +2,29 @@
 
 
 
-#      Copyright (C) 2013 by Kristoff Bonne, ON1ARF
-#
-#      This program is free software; you can redistribute it and/or modify
-#      it under the terms of the GNU General Public License as published by
-#      the Free Software Foundation; version 2 of the License.
-#
-#      This program is distributed in the hope that it will be useful,
-#      but WITHOUT ANY WARRANTY; without even the implied warranty of
-#      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#      GNU General Public License for more details.
+# Copyright (C) 2013 Kristoff Bonne ON1ARF
 
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU Lesser General Public License version 2.1, as
+#   published by the Free Software Foundation.  This program is
+#   distributed in the hope that it will be useful, but WITHOUT ANY
+#   WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+#   License for more details.
+
+#   You should have received a copy of the GNU Lesser General Public License
+#   along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+
+# NOTE, due to prior copyright, not all code in this package is published
+# under the LGPL License.
+# "dspstuff_2400.c" and "dspstuff_4800' are licensed as follows:
+# GNU General Public License ... version 2 of the license 
 
 # version 20130122: initial release
 # Version 20130314: API c2gmsk version / bitrate control + versionid codes
 # Version 20130324: convert into .so shared library
-
+# Version 20130601: added support for golay23 library (used in 2400 bps modem)
 
 
 # Set to 0 to use integer math
@@ -42,7 +49,7 @@ all:	gmskmodemapi
 test:	apitest_modulate_2400 apitest_modulate_4800 apitest_demodulate_2400 apitest_demodulate_4800
 
 	
-gmskmodemapi: Makefile gmskmodemapi.c gmskmodemapi.h a_dspstuff_4800.h a_dspstuff_2400.h a_gmskmodulate.h  countdiff.h c2gmskchain.h c2gmskabuff.h c2gmsksess.h c2gmskprintbit.h c2gmskdebugmsg.h c2gmsksupport.h c2gmskstr.h c2gmskmodulate.h c2_interleave.h c2_scramble.h c2_fec.h golay23.o
+gmskmodemapi: Makefile gmskmodemapi.c gmskmodemapi.h dspstuff_4800.h dspstuff_2400.h gmskmodulate.h  countdiff.h global.h c2gmskchain.h c2gmskabuff.h c2gmsksess.h c2gmskprintbit.h c2gmskdebugmsg.h c2gmsksupport.h c2gmskstr.h c2gmskmodulate.h c2_interleave.h c2_scramble.h c2_fec.h golay23.o
 	gcc -O2 -fPIC -D_USEFLOAT=$(USEFLOAT) -D_INTMATH=$(INTMATH) -c -Wall gmskmodemapi.c
 	gcc -shared -Wl,-soname,libc2gmsk.so.0 -o libc2gmsk.so.0.0.0 gmskmodemapi.o golay23.o
 

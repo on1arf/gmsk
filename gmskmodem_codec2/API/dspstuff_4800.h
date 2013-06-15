@@ -1,6 +1,6 @@
 // DSP related functions and data //
 
-// "API" version
+// 4800 version
 
 /*
  *      Original copyright:

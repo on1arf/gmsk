@@ -146,6 +146,9 @@ int get_syndrome(int pattern)
  * obtain its syndrome in decoding.
  */
 {
+// we only need 23 bits
+pattern &= 0x7FFFFF;
+
     int aux = X22;
  
     if (pattern >= X11)
@@ -292,7 +295,7 @@ Slighly modified by Kristoff Bonne (ON1ARF) to better suite the c2gmskAPI
 
 int golay23_decode(unsigned char * p_in) {
 	// Kr. Bonne (4/june/2013):
-	// p_in is pointer to unsigned char array of at least 3 elements
+	// p_in is pointer to unsigned char array of at least 3 chars
 	// 23 bits are used for input
 	// bits are ordered lsb first: 01234567 01234567 01234567
 	// octets are ordered LSB first: 0 1 2
@@ -312,22 +315,28 @@ int golay23_decode(unsigned char * p_in) {
 
 	in=((int) p_in[0]) + (((int) p_in[1]) << 8) + (((int) p_in[2]) << 16);
     //printf("syndrome: 0x%x\n", get_syndrome(received_codeword));
-    decoded=(in ^ decoding_table[get_syndrome(in)]) >> 11;
 
+	// decoded = corrected codeword
+   decoded=(in ^ decoding_table[get_syndrome(in)]);
+
+	// calculate "diff" now before applying "left-shift 11" on "decoded"
+	diff= in ^ decoded;
+
+	// decoded code = 12 bits of data followed by 11 bits of error correction.
+	// to get encoded data, move 11 bits to the right
+	decoded >>= 11;
 	p_in[0]=(unsigned char) ((decoded)&0xff);
 	p_in[1]=(unsigned char) ((decoded>>8)&0x0f); // note, this will overwrite the 4 rightmost bits
 																//of p_in[1] but as it is ignored by convertion of
 																// 2400 bits down to 1400 bits, that doesn't matter
 
-	// decoded = corrected codeword
-	diff= in ^ decoded;
 
 	errors=0;
 	while (diff) {
 		if (diff  & 0x01) {
 			errors++;
 		}; // end if
-		diff >>= 1;
+		diff >>= 1; // as "diff" is UNSIGNED int, shift-left is LOGICAL shift
 	}; // end while
 
 	return(errors);
