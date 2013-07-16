@@ -3,9 +3,10 @@
 
 // global data + defines, some other vars
 
-// version 20130326 initial release
+// version 20130326: initial release
 // version 20130404: added half duplex support
 // version 20130606: changed license to LGPL
+// version 20130614: add support for bps and c2gmskversion
 
 
 /* Copyright (C) 2013 Kristoff Bonne ON1ARF
@@ -64,18 +65,26 @@
 
 // global data structure definition for RECEIVER
 struct globaldata {
+	// buffers
 	char *ringbuffer_s[NUMBUFF];
 	char *ringbuffer_r[NUMBUFF];
 	int pntr_r_read, pntr_r_write, pntr_s_read, pntr_s_write;
+
+	// UDP networking
 	char * udpout_host;
 	int udpout_port;
 	int udpin_port;
-
-	int dumpstream;
-	int dumpaverage;
-
 	int ipv4only;
 	int ipv6only;
+
+
+	// gmsk options
+	int c2gmskbps; // 2400 or 4800
+	int c2gmskvers; // 0 up to 15
+
+	// options
+	int dumpstream;
+	int dumpaverage;
 
 	// portaudio device parameters
 	char * adevice;

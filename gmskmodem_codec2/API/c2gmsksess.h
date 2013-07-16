@@ -27,6 +27,9 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130506: Add modem 2400/15
+// Version 20130606: convert from GPL to LGPL
+// version 20130614: add support for raw gmsk buffer input/output
 
 
 // c2gmsk API sessions
@@ -84,6 +87,33 @@ if (param->expected_apiversion > C2GMSK_APIVERSION) {
 	return(NULL);
 }; // end if
 
+
+// checking global parameters before initiasing
+// parameters specific for modulation or demodulation are verified 
+// in mod_init and demod_init
+
+// only for clients using API version 20130614 and above
+if (param->expected_apiversion >= 20130614) {
+	// check output format, should "0" (audio) or "1" (raw gmsk)
+	if ((param->outputformat != C2GMSK_OUTPUTFORMAT_AUDIO) && (param->outputformat != C2GMSK_OUTPUTFORMAT_GMSK)) {
+		*ret=C2GMSK_RET_UNSUPPORTEDOUTPUTFORMAT;
+		return(NULL);
+	}; // end if
+
+
+	// check "disabled"
+	if ((param->m_disabled != C2GMSK_DISABLED) && (param->m_disabled != C2GMSK_NOTDISABLED)) {
+		*ret=C2GMSK_RET_UNSUPPORTEDDISABLE;
+		return(NULL);
+	}; // end if
+
+	if ((param->d_disabled != C2GMSK_DISABLED) && (param->d_disabled != C2GMSK_NOTDISABLED)) {
+		*ret=C2GMSK_RET_UNSUPPORTEDDISABLE;
+		return(NULL);
+	}; // end if
+}; // end if (version 20130614 or above)
+
+
 // allocate memory for new structure
 newsessid=malloc(sizeof(struct c2gmsk_session));
 
@@ -118,27 +148,74 @@ if (ret2 != C2GMSK_RET_OK) {
 }; // end if
 
 
-// init audiobuffer
-// copy signature for 48kbps audio
-memcpy(newsessid->m_abuff.signature,ABUFF48_SIGNATURE,4);
 
+// pre-init audiobuffer or gmsk buffer to NULL
+// change to real buffer in init_demod
+newsessid->m_abuff= NULL;
+newsessid->m_gbuff= NULL;
+
+// for API version 20130614 and above
+if (param->expected_apiversion >= 20130614) {
+	// copy "output format"
+	newsessid->outputformat=param->outputformat;
+
+	// copy "disabled"
+	newsessid->m_disabled=param->m_disabled;
+	newsessid->d_disabled=param->d_disabled;
+
+	// copy bitrates
+} else {
+	// default values for clients using API below 201300614
+	newsessid->outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
+	newsessid->m_disabled=C2GMSK_NOTDISABLED;
+	newsessid->d_disabled=C2GMSK_NOTDISABLED;
+}; // end if
+
+
+// init some data
+// init debug messages
+c2gmsk_printstr_init();
 
 
 // init modulator
-ret2=c2gmsk_mod_init(newsessid, param);
-if (ret2 != C2GMSK_RET_OK) {
-	*ret=ret2;
-	return(NULL);
-}; // end if
+if (param->m_disabled == C2GMSK_NOTDISABLED) {
+	ret2=c2gmsk_mod_init(newsessid, param);
+	if (ret2 != C2GMSK_RET_OK) {
+		*ret=ret2;
+		return(NULL);
+	}; // end if
+}; // end if (not disabled)
 
 
 // init demodulator
 // note: init demod will also call "queue_debug_bit_init" and "c2gmsk_printstr_init"
-ret2=c2gmsk_demod_init(newsessid, param);
-if (ret2 != C2GMSK_RET_OK) {
-	*ret=ret2;
-	return(NULL);
+if (param->d_disabled == C2GMSK_NOTDISABLED) {
+	ret2=c2gmsk_demod_init(newsessid, param);
+	if (ret2 != C2GMSK_RET_OK) {
+		*ret=ret2;
+		return(NULL);
+	}; // end if
+}; // end if (not disabled)
+
+// init framesize
+// set size of 40 ms frame
+if (param->m_disabled != C2GMSK_DISABLED) {
+	if (param->m_bitrate == C2GMSK_MODEMBITRATE_2400) {
+		newsessid->framesize40ms=12; // 40 ms @ 2400 bps = 96 bits = 12 octets
+	} else {
+		newsessid->framesize40ms=24; // 40 ms @ 4800 bps = 192 bits = 24 octets
+	}; // end else - if
+} else {
+	// modulator is disabled. Get info from demodulator
+	if (param->d_disabled != C2GMSK_DISABLED) {
+		if (param->d_bitrate == C2GMSK_MODEMBITRATE_2400) {
+			newsessid->framesize40ms=12; // 40 ms @ 2400 bps = 96 bits = 12 octets
+		} else {
+			newsessid->framesize40ms=24; // 40 ms @ 4800 bps = 192 bits = 24 octets
+		}; // end else - if
+	}; // end if
 }; // end if
+
 
 
 // return capabilities

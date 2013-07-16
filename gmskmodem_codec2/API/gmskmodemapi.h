@@ -3,8 +3,9 @@
 // version 20130122: initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
-// Version 20130507: support for 2400bps/versid15 modem
+// Version 20130506: support for 2400bps/versid15 modem
 // Version 20130606: support for auxiliary data channel
+// Version 20130614: support for binairy gmsk output format
 
 
 /* Copyright (C) 2013 Kristoff Bonne ON1ARF
@@ -25,19 +26,21 @@
 
 // defines
 // API version id
-#define C2GMSK_APIVERSION 20130606
+#define C2GMSK_APIVERSION 20130614
 
 
 // signatures of internal data structures
 #define SESS_SIGNATURE "C2id"
 #define CHAIN_SIGNATURE "C2ch"
+#define MSG_SIGNATURE "C2mg"
 #define ABUFF48_SIGNATURE "C2a4"
 #define ABUFF8_SIGNATURE "C2a8"
 #define PARAM_SIGNATURE "C2pa" // parameters 
+#define GBUFF_SIGNATURE "C2gm" // raw GMSK data
 
 
 // return values of functions
-#define C2GMSK_RET_HIGHEST 19
+#define C2GMSK_RET_HIGHEST 24
 char *c2gmsk_str_ret[C2GMSK_RET_HIGHEST+1];
 
 #define C2GMSK_RET_OK 0
@@ -63,8 +66,12 @@ char *c2gmsk_str_ret[C2GMSK_RET_HIGHEST+1];
 #define C2GMSK_RET_UNSUPPORTEDVERSIONID 17
 #define C2GMSK_RET_UNSUPPORTEDMODEMBITRATE 18
 #define C2GMSK_RET_OPERATIONDISABLED 19
+#define C2GMSK_RET_UNSUPPORTEDOUTPUTFORMAT 20
+#define C2GMSK_RET_UNSUPPORTEDDISABLE 21
 
-
+#define C2GMSK_RET_NOVALIDGBUFF 22
+#define C2GMSK_RET_NOVALIDMSG 23
+#define C2GMSK_RET_NOVALIDTOD 24
 
 // Type Of Data
 #define C2GMSK_MSG_HIGHEST 0x52
@@ -80,6 +87,9 @@ char *c2gmsk_str_msg[C2GMSK_MSG_HIGHEST+1];
 #define C2GMSK_MSG_PCM48K 0x22
 #define C2GMSK_MSG_AUXDATA 0x23 // received auxdata
 #define C2GMSK_MSG_AUXDATA_DONE 0x24 // sending auxdata is done
+#define C2GMSK_MSG_RAWGMSK_96 0x25 // 96 bits of raw GMSK data (= 40 ms @ 2400 bps)
+#define C2GMSK_MSG_RAWGMSK_192 0x26 // 192 bits of raw GMSK data (= 40 ms @ 4800 bps)
+
 
 // data types used for debug information
 #define C2GMSK_MSG_AUDIOAVGLEVEL 0x30
@@ -129,7 +139,11 @@ char *c2gmsk_str_statdem[C2GMSK_STATDEM_HIGHEST+1];
 #define C2GMSK_MODEMBITRATE_2400 1
 #define C2GMSK_MODEMBITRATE_4800 2
 
+#define C2GMSK_OUTPUTFORMAT_AUDIO 0
+#define C2GMSK_OUTPUTFORMAT_GMSK 1
 
+#define C2GMSK_NOTDISABLED 0
+#define C2GMSK_DISABLED 1
 // capabilities of the API
 #define C2GMSK_CAP_C2GMSKVER 1
 #define C2GMSK_CAP_MODEMBITRATE 2
@@ -142,6 +156,7 @@ char *c2gmsk_str_statdem[C2GMSK_STATDEM_HIGHEST+1];
 
 // generic structure
 struct c2gmsk_msg {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // whatever size it is
 	unsigned char data[]; // unknown size, will not be included in sizeof
@@ -151,17 +166,20 @@ struct c2gmsk_msg {
 // return messages concisting of 0, 1, 2, 3 or 4 data fields
 // no datafields
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // 0
 } c2gmsk_msg_0; // structure msg no datafields
 
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // 0
 	int data0;
 } c2gmsk_msg_1; // structure msg one datafield
 
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // 0
 	int data0;
@@ -169,6 +187,7 @@ typedef struct {
 } c2gmsk_msg_2; // structure msg two datafields
 
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // 0
 	int data0;
@@ -177,6 +196,7 @@ typedef struct {
 } c2gmsk_msg_3; // structure msg three datafields
 
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // 0
 	int data0;
@@ -188,6 +208,7 @@ typedef struct {
 
 // 40 ms of codec2 voice
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // C2GMSK_MSG_CODEC2
 	int datasize; // 7, 8 or corrected for 32 bit wordboundary
 	int realsize; // 7 or 8
@@ -197,20 +218,29 @@ typedef struct {
 
 // 40 ms of PCM voice (8k or 48 k)
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // C2GMSK_MSG_PCM8K
 	int datasize; // 640 (40 ms @ 8k = 320 samples: @ 16bit/sample = 640 octets)
 	int16_t pcm[320];
 } c2gmsk_msg_pcm8k; // structure 8k pcm audio
 
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // C2GMSK_MSG_PCM48K
 	int datasize; // 3840 (40 ms @ 8k = 1920 samples: @ 16bit/sample = 3840 octets)
 	int16_t pcm[1920];
 } c2gmsk_msg_pcm48k; // structure 48k pcm audio
 
+typedef struct {
+	unsigned char signature[4]; // contains signature
+	int tod; // C2GMSK_MSG_RAWGMSK_96 or C2GMSK_MSG_RAWGMSK_192
+	int datasize; // 12 (96 bits) or 24 (192 bits) depending on bitrate
+	unsigned char data[24]; // big enough for both 2400 and 4800 bps modem
+} c2gmsk_msg_rawgmsk;
 
 // debug messages used by the demodulator
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // C2GMSK_DEBUG_AUDIOAVG
 	int datasize; // (sizeof int)
 	int average;
@@ -219,6 +249,7 @@ typedef struct {
 // structures used for printbit-verbose
 // same as generic "msg" + real length
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // whatever size it is, stretched out to next word boundairy
 	int realsize; // real amount of data, excluding padding data for word-boundairy
@@ -228,6 +259,7 @@ typedef struct {
 // structures used for printbit-verbose
 // same as generic "msg" + real length + marker
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // whatever size it is, stretched out to next word boundairy
 	int realsize; // real amount of data, excluding padding data for word-boundairy
@@ -239,6 +271,7 @@ typedef struct {
 // AUXILIARY DATA STRUCTURE
 // structure to return received data from auxiliary data server
 typedef struct {
+	unsigned char signature[4]; // contains signature
 	int tod; // type of data
 	int datasize; // whatever site it is, stretched out to next word boundairy
 	int realsize; // real amount of data, excluding padding data for word-boundairy²
@@ -277,6 +310,16 @@ struct c2gmsk_param {
 
 	// parameters for demodulation
 	int d_disableaudiolevelcheck;
+	int d_bitrate; // fixed 2400 or 4800 bps, "auto" to be added later
+
+	// output format: 0 (PCM48K audio PCM48K) or 1 (binairy GMSK)
+	int outputformat;
+
+	// disable modulator?
+	int m_disabled;
+
+	// disable demodulator ?
+	int d_disabled;
 };
 
 
@@ -290,6 +333,16 @@ typedef struct {
 										// it easier to copy to a chain 
 } audiobuff40_48k;
 
+// 40 ms gmsk buffer
+typedef struct {
+	unsigned char signature[4];
+	int size; // 96 or 192 (bits), depending on bitrate
+	int used; // counter is BITS
+	int bitcount; // should go from 0 to 7
+	unsigned char * p_data; // pointer to last char to modify
+	c2gmsk_msg_rawgmsk msg;
+} gmskbuff;
+
 // session
 struct c2gmsk_session {
 	unsigned char signature[4]; // contains signature
@@ -302,7 +355,8 @@ struct c2gmsk_session {
 
 	// data for modulator
 	struct c2gmsk_msgchain * m_chain;
-	audiobuff40_48k m_abuff;
+	audiobuff40_48k * m_abuff;
+	gmskbuff * m_gbuff;
 	
 	int m_state;
 
@@ -412,6 +466,13 @@ struct c2gmsk_session {
 
 	// used for both modulator and demodulator
 	int framesize40ms;
+
+	// output format: 0 (PCM48K audio PCM48K) or 1 (binairy GMSK)
+	int outputformat;
+
+	// "disabled" flags
+	int m_disabled; // for modulator
+	int d_disabled; // for demodulator
 };
 
 
@@ -432,6 +493,12 @@ int c2gmskchain_reinit (struct c2gmsk_msgchain * chain, int size);
 int c2gmskabuff48_add (audiobuff40_48k * buffer, int16_t *in, int numsample, struct c2gmsk_msgchain * chain);
 int c2gmskabuff48_flush (audiobuff40_48k * buffer, struct c2gmsk_msgchain * chain);
 int c2gmskabuff48_modulatebits (struct c2gmsk_session * sessid, unsigned char *in, int nbits, int orderinvert);
+
+// GMSK buffer functions
+int checksign_gbuff (gmskbuff *);
+int c2gmskgbuff_add (struct c2gmsk_session * sessid, unsigned char *in, int numbits);
+int c2gmskgbuff_flush (gmskbuff * buffer, struct c2gmsk_msgchain * chain);
+
 
 // printbit functions
 int queue_debug_bit_init (struct c2gmsk_session * sessid);
@@ -462,6 +529,9 @@ int c2gmsk_mod_voice1400 (struct c2gmsk_session * sessid, unsigned char * c2data
 int c2gmsk_mod_voice1400_end (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
 int c2gmsk_mod_audioflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
 
+// generic "output buffer flush" for both PCM 48K audio and GMSK buffers, depedending on "outputformat"
+int c2gmsk_mod_outputflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
+
 int c2gmsk_demod (struct c2gmsk_session * sessid, int16_t  * in, struct c2gmsk_msgchain ** out);
 int c2gmsk_demod_init (struct c2gmsk_session * sessid, struct c2gmsk_param *param);
 
@@ -476,6 +546,8 @@ int c2gmsk_msgdecode_numeric (struct c2gmsk_msg * msg, int *data);
 int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff);
 int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t pcmbuff[]);
 int c2gmsk_msgdecode_pcm48k_p (struct c2gmsk_msg * msg, int16_t * pcmbuff[]);
+int c2gmsk_msgdecode_gmsk (struct c2gmsk_msg * msg, unsigned char * gmskbuff);
+int c2gmsk_msgdecode_gmsk_p (struct c2gmsk_msg * msg, unsigned char ** gmskbuff);
 
 // get version
 int c2gmsk_getapiversion ();

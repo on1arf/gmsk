@@ -26,6 +26,10 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130506: 2400/15 modem
+// Version 20130601: golay FEC for 2400/15 modem
+// Version 20130606: auxiliary data
+// Version 20130614: raw gmsk bits input / output
 
 
 // printstr: conversion of numeric messages and return values into text
@@ -68,6 +72,11 @@ c2gmsk_str_ret[C2GMSK_RET_NOVALIDRETPOINT]="Not a valid messagechain return poin
 c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDVERSIONID]="Unsupported c2gmsk version id";
 c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDMODEMBITRATE]="Unsupported modem version id";
 c2gmsk_str_ret[C2GMSK_RET_OPERATIONDISABLED]="Operation Disabled";
+c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDOUTPUTFORMAT]="Incorrect output format";
+c2gmsk_str_ret[C2GMSK_RET_UNSUPPORTEDDISABLE]="Incorrect value for disabled";
+c2gmsk_str_ret[C2GMSK_RET_NOVALIDGBUFF]="Not a valid gmskbuff structure";
+c2gmsk_str_ret[C2GMSK_RET_NOVALIDMSG]="Not a valid messagechain message structure";
+c2gmsk_str_ret[C2GMSK_RET_NOVALIDTOD]="Not a valid Type-Of-Data for this function";
 
 
 // type of data
@@ -84,6 +93,8 @@ c2gmsk_str_msg[C2GMSK_MSG_PCM8K]="pcm audio at 8khz";
 c2gmsk_str_msg[C2GMSK_MSG_PCM48K]="pcm audio at 48 khz";
 c2gmsk_str_msg[C2GMSK_MSG_AUXDATA]="received auxiliary data";
 c2gmsk_str_msg[C2GMSK_MSG_AUXDATA_DONE]="sending auxiliary data finished";
+c2gmsk_str_msg[C2GMSK_MSG_RAWGMSK_96]="96 bits GMSK data";
+c2gmsk_str_msg[C2GMSK_MSG_RAWGMSK_192]="192 bits GMSK data";
 c2gmsk_str_msg[C2GMSK_MSG_AUDIOAVGLEVEL]="average audio level";
 c2gmsk_str_msg[C2GMSK_MSG_AUDIOAVGLVLTEST]="average audio-level test result";
 c2gmsk_str_msg[C2GMSK_MSG_INAUDIOINVERT]="input audio inversion";

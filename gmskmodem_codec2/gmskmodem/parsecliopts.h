@@ -23,6 +23,7 @@
 // version 20130326: initial release
 // version 20130404: added half duplex support
 // version 20130606: changed license to LGPL
+// version 20130614: add support for c2gmskbps and c2gmskversion
 
 
 int parsecliopts(int argc, char ** argv, char * retmsg, struct globaldata * pglobal) {
@@ -30,7 +31,7 @@ int parsecliopts(int argc, char ** argv, char * retmsg, struct globaldata * pglo
 char * usage="Usage: gmskmodem [options] -adevice <audiodevice> [-exact] -udp <remote ip-address> <remote udp-port> <local udp-port>\n\
 Use \"gmskmodem -h\" for full option list";
 
-char * help="Usage: gmskmodem [-h] [-v] [-4 | -6] [-d] [-dd] [-da] [-sb <0.1sec>] [-se <0.1-sec>] [-id idfile idfreq] [{-ptt_cs serialdevice} | {-ptt_tx serialdevice} | {-ptt_gpio gpioport} | {-ptt_lf lockfile}] [-pttinvert] [-forcestereo {n,r,s,b}] [-audioinvert] -adevice <audiodevice> [-exact] -udp <remote ip-address> <remote udp-port> <local udp-port>\n\
+char * help="Usage: gmskmodem [-h] [-v] [-4 | -6] [-d] [-dd] [-da] [-sb <0.1sec>] [-se <0.1-sec>] [-id idfile idfreq] [-c2gmskbp <bps>] [-c2gmskvers <version>] [{-ptt_cs serialdevice} | {-ptt_tx serialdevice} | {-ptt_gpio gpioport} | {-ptt_lf lockfile}] [-pttinvert] [-forcestereo {n,r,s,b}] [-audioinvert] -adevice <audiodevice> [-exact] -udp <remote ip-address> <remote udp-port> <local udp-port>\n\
 \n\
 Options:\n\
  -h: help (this text)\n\
@@ -46,6 +47,9 @@ Optional arguments:\n\
  -forcestereo: force audio device as stereo: 'n' (no), 'r' (receiver), 's' (sender), 'b' (both)\n\
  -audioinvert: sender audio invertion (SENDER). Receiver audio-invertion is auto-detected.\n\
  -halfduplex: audio devices half duplex.\n\
+\n\
+ -c2gmskbps: modem bps rate (2400 or 4800). Default is 2400\n\
+ -c2gmskvers: c2gmsk modem versionid: 0 to 15. Default 15 if 2400 bps is selected or 0 if 4800 bps is selected.\n\
 \n\
 \n\
  -sb: length of silence at beginning of transmission (1/10 seconds)\n\
@@ -195,6 +199,44 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 	} else if (strcmp(thisarg,"-pttinvert") == 0) {
 		// -pttinvert
 		pglobal->ptt_invert=1;
+
+	} else if (strcmp(thisarg,"-c2gmskbps") == 0) {
+		// c2gmsk bps
+		if (pglobal->c2gmskbps != 0) {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskbps can only be set only once\n");
+			return(-1);
+		}; // end if
+
+		// is there a next argument?
+		if (paramloop+1 < argc) {
+			paramloop++;
+			pglobal->c2gmskbps=atoi(argv[paramloop]);
+		}; // end if
+
+		if ((pglobal->c2gmskbps != 2400) && (pglobal->c2gmskbps != 4800)) {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskbps should be 2400 or 4800\n");
+			return(-1);
+		}; // end if
+
+	} else if (strcmp(thisarg,"-c2gmskvers") == 0) {
+		// c2gmsk version
+		if (pglobal->c2gmskbps != 0) {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskvers can only be set only once\n");
+			return(-1);
+		}; // end if
+
+		// is there a next argument?
+		if (paramloop+1 < argc) {
+			paramloop++;
+			pglobal->c2gmskvers=atoi(argv[paramloop]);
+		}; // end if
+
+		if ((pglobal->c2gmskvers < 0) && (pglobal->c2gmskvers > 15)) {
+			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskvers should be between 0 and 15\n");
+			return(-1);
+		}; // end if
+
+
 	} else if (strcmp(thisarg,"-sb") == 0) {
 		// -sb: silence begin
 
@@ -319,8 +361,31 @@ if (argc <= 2) {
 }; // end if
 
 // Done reading all parameters.
-// set some implicit parameters
 
+// set some implicit parameters
+// set c2gmskbps/c2gmskversion to 2400/15, if not c2gmskbps and c2gmskversion are not set
+if ((pglobal->c2gmskbps == -1) && (pglobal->c2gmskvers == -1)) {
+	pglobal->c2gmskbps=2400;
+	pglobal->c2gmskvers=15;
+}; // end if
+
+
+// if c2gmskbps is set to 2400, set default c2gmskversion = 15
+if ((pglobal->c2gmskbps == 2400) && (pglobal->c2gmskvers == -1)) {
+	pglobal->c2gmskvers=15;
+}; // end if
+if ((pglobal->c2gmskbps == -1) && (pglobal->c2gmskvers == 15)) {
+	pglobal->c2gmskbps=2400;
+}; // end if
+
+
+// if c2gmskbps is set to 4800, set default c2gmskversion = 0
+if ((pglobal->c2gmskbps == 4800) && (pglobal->c2gmskvers == -1)) {
+	pglobal->c2gmskvers=0;
+}; // end if
+if ((pglobal->c2gmskbps == -1) && (pglobal->c2gmskvers == 0)) {
+	pglobal->c2gmskbps=4800;
+}; // end if
 
 ////////////////////////////////////////
 // ERROR CHECKING
@@ -338,6 +403,17 @@ if ((!(pglobal->udpout_host))  || (!(pglobal->udpout_port)) || (!(pglobal->udpin
 	return(-1);
 }; // end if
 
+
+// check if c2gmsk bps is set
+if (pglobal->c2gmskbps == -1) {
+	snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskbps not set\n");
+	return(-1);
+}; // end if
+
+if (pglobal->c2gmskvers == -1) {
+	snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskvers not set\n");
+	return(-1);
+}; // end if
 
 /////////////
 

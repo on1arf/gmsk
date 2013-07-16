@@ -1,13 +1,8 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 0 (versionid 0x27f301): 4800 bps, 1/3 repetition code FEC
+// codec versions 4800/0 and 2400/15
 
-
-// The low-level DSP functions are largly taken from the
-// pcrepeatercontroller project written by
-// Jonathan Naylor, G4KLX
-// More info: http://groups.yahoo.com/group/pcrepeatercontroller
 
 
 /*
@@ -31,6 +26,7 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// version 20130614: merge 2400 and 4800 bps modem, added support for aux-data and raw gmsk 
 
 
 
@@ -66,7 +62,14 @@ struct c2gmsk_msg * msg;
 // buffers for data
 char txtline[203]; // text line for "printbit". Should normally by up to 192, add 3 for "space + marker" and terminating null, add 8 for headroom for PLL syncing-errors
 unsigned char c2buff[8]; // buffer is 8 octets: to accomodate all bitrates (1200 and 2400 bps c2 = 8 octets/frame, 1200 bps c2 = 7 octets/frame)
-int16_t pcmbuffer[1920]; // 40 ms audio @ 48000 = 1920 samples = 3840 octets
+int bitrate, outputformat;
+
+
+// reuse input buffer for pcm and for gmsk
+union {
+	int16_t pcmbuffer[1920]; // 40 ms audio @ 48000 = 1920 samples = 3840 octets
+	unsigned char gmskbuffer[24]; // 40 ms gmsk @ 4800 bps
+} buffer_u;
 
 int fout, fin; // file out and file in 
 char * infilename, * outfilename; // filename input and output files
@@ -74,6 +77,7 @@ char * infilename, * outfilename; // filename input and output files
 // some local vars
 int framecount, msgcount;
 int ret,ret2;
+int sizetoread;
 
 // vars used to extract messages from message queue
 int tod; // type of data
@@ -85,17 +89,34 @@ int data[4]; // used for numeric data
 char * bitrate2text[] = { "2400", "4800"};
 
 
-// check parameters, we need at least 2 parameters: infile and outfile
-if (argc < 3) {
-	fprintf(stderr,"Error: at least 2 parameters needed.\nUsage: %s modaudiofile.raw outfile.c2\n",argv[0]);
+// check parameters, we need at least 4 parameters: infile and outfile
+if (argc < 5) {
+	fprintf(stderr,"Error: at least 4 parameters needed.\n");
+	fprintf(stderr,"Usage: %s modaudiofile.raw outfile.c2 bitrate outputformat\n",argv[0]);
 	exit(-1);
+};
+
+infilename=argv[1];
+outfilename=argv[2];
+
+bitrate=atoi(argv[3]);
+
+if ((bitrate != 2400) && (bitrate != 4800)) {
+	fprintf(stderr,"Error: bitrate should be 2400 or 4800. Got %d.\n",bitrate);
+	exit(-1);
+}; // end if
+
+if ((argv[4][0] == 'a') || (argv[4][0] == 'A')) {
+	outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
+} else if ((argv[4][0] == 'g') || (argv[4][0] == 'G')) {
+	outputformat=C2GMSK_OUTPUTFORMAT_GMSK;
 } else {
-	infilename=argv[1];
-	outfilename=argv[2];
-}; // end else - if
+	fprintf(stderr,"Error: output format should be audio or GMSK, got %c.\n",argv[4][0]);
+	exit(-1);
+}; // end elsif - if
 
 // open out file
-fout=open(outfilename,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+fout=open(outfilename,O_WRONLY|O_CREAT|O_TRUNC,S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 
 if (fout < 0) {
 	fprintf(stderr,"Error: could not open file for output: %d (%s)! \n",errno,strerror(errno));
@@ -123,12 +144,18 @@ if (ret != C2GMSK_RET_OK) {
 }; // end if
 
 // fill in parameters
-param.expected_apiversion=0;
-param.d_disableaudiolevelcheck=1;
-param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
-param.m_version=0;
+param.expected_apiversion=20130614;
+if (bitrate == 2400) {
+	param.d_bitrate=C2GMSK_MODEMBITRATE_2400;
+} else {
+	param.d_bitrate=C2GMSK_MODEMBITRATE_4800;
+}; // end else - if
 
+// disactivate modulation
+param.m_disabled=C2GMSK_DISABLED;
 
+// set expected outputformat
+param.outputformat=outputformat;
 
 // create gmsk session
 sessid=c2gmsk_sess_new(&param,&ret, pchain);
@@ -148,6 +175,11 @@ tod=C2GMSK_MSG_CAPABILITIES;
 
 while ((msg = c2gmsk_msgchain_search(C2GMSK_SEARCH_POSCURRENT, chain, &tod, &datasize, NULL))) {
 	ret=c2gmsk_msgdecode_numeric (msg, data);
+
+	if (ret < 0) {
+		printf("Error: c2gmsk_msgdecode_numeric got error %d: %s\n",-ret,c2gmsk_printstr_ret(-ret));
+		continue;
+	}; // end if
 
 	// data[0] = versionid
 	// data[1] = bitrate
@@ -171,15 +203,33 @@ printf("\n");
 //////////////////////////////////////////
 // session is created, let's get started
 
-ret=read(fin, pcmbuffer, sizeof(pcmbuffer));
+if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+	sizetoread=1920 * sizeof(int16_t);
+} else {
+	// GMSK
+
+	if (bitrate == 2400) {
+		sizetoread=12; // 40 ms @ 2400 bps = 96 bits = 12 octets
+	} else {
+		sizetoread=24; // 40 ms @ 4800 bps + 192 bits = 24 octets
+	}; // end if
+}; // end if
+
+
+ret=read(fin, &buffer_u, sizetoread);
 
 framecount=0;
 
-while (ret == sizeof(pcmbuffer)) {
+while (ret == sizetoread) {
 
 	framecount++;
 
-	ret2=c2gmsk_demod(sessid,pcmbuffer,pchain);
+	if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+		ret2=c2gmsk_demodpcm(sessid,buffer_u.pcmbuffer,pchain);
+	} else {
+		ret2=c2gmsk_demodgmsk(sessid,buffer_u.gmskbuffer,pchain);
+	}; // end if
+
 	chain=*pchain;
 
 	if (ret2 != C2GMSK_RET_OK) {
@@ -199,6 +249,7 @@ while (ret == sizeof(pcmbuffer)) {
 		} else {
 			printf("Processing message %d.%d\n",framecount,msgcount);
 		}; // end else - if
+
 		msgcount++;
 
 	
@@ -214,6 +265,11 @@ while (ret == sizeof(pcmbuffer)) {
 
 		// is it a call that return one or more numeric vales?
 		ret2=c2gmsk_msgdecode_numeric (msg, data);
+		if (ret2 < 0) {
+			printf("Error in msgdecode - numeric for tod %d. Error %d: %s\n",tod,-ret2,c2gmsk_printstr_ret(-ret2));
+			continue;
+		}; // end if
+
 
 		if (ret2 > 0) {
 			if (ret2 > 1) {
@@ -246,36 +302,35 @@ while (ret == sizeof(pcmbuffer)) {
 			}; // end switch
 
 			continue;
-		} else if (ret2 < 0) {
-			fprintf(stderr,"Error: message-decode numeric fails on sanity check!\n");
-			continue;
 		}; // end else - if
 
 
 		// codec2?
-		ret2=c2gmsk_msgdecode_c2(msg, c2buff);
+		if (tod == C2GMSK_MSG_CODEC2) {
+			ret2=c2gmsk_msgdecode_c2(msg, c2buff);
 
-		if (ret2 > 0) {
-			// codec2, check version
+			if (ret2 > 0) {
+				// codec2, check version
 
-			if (ret2 != C2GMSK_CODEC2_1400) {
-				fprintf(stderr,"Error: unsupported codec2 bitrate %d\n",ret2);
+				if (ret2 != C2GMSK_CODEC2_1400) {
+					fprintf(stderr,"Error: unsupported codec2 bitrate %d\n",ret2);
+					continue;
+				};
+
+				printf("Writing codec2 frame \n");
+				// write data in file
+				ret2=write(fout,c2buff,C2GMSK_CODEC2_FRAMESIZE_1400);
+
+				if (ret2 < 0) {
+					// write should return number of octets written
+					fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
+				}; // end if
+
 				continue;
-			};
-
-			printf("Writing codec2 frame \n");
-			// write data in file
-			ret2=write(fout,c2buff,C2GMSK_CODEC2_FRAMESIZE_1400);
-
-			if (ret2 < 0) {
-				// write should return number of octets written
-				fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
+			} else if (ret2 < 0) {
+				printf("Error: c2gmsk_msgdecode codec2 for tod %d got error %d: %s\n",tod,-ret2,c2gmsk_printstr_ret(-ret2));
+				continue;
 			}; // end if
-
-			continue;
-		} else if (ret2 < 0) {
-			fprintf(stderr,"Error: message-decode codec2 fails on sanity check!\n");
-			continue;
 		}; ; // end if
 
 
@@ -294,7 +349,7 @@ while (ret == sizeof(pcmbuffer)) {
 
 	}; // end while all messages in queue
 
-	ret=read(fin, pcmbuffer, sizeof(pcmbuffer));
+	ret=read(fin, &buffer_u, sizetoread);
 }; // end while
 
 

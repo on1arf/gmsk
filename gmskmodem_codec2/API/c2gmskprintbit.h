@@ -114,6 +114,7 @@ if (sessid->d_printbitcount > 0) {
 		return(C2GMSK_RET_NOMEMORY);
 	}; // end if
 
+	memcpy(msg->signature,MSG_SIGNATURE,4);
 	msg->tod=C2GMSK_PRINTBIT_MOD;
 	
 	msg->datasize=memsize_data + (sizeof(int)<<1); // amount of data, corrected for word boundary + 2 * integer
@@ -216,6 +217,7 @@ if (sessid->d_printbitcount_v > 0) {
 		return(C2GMSK_RET_NOMEMORY);
 	}; // end if
 
+	memcpy(msg->signature,MSG_SIGNATURE,4);
 	msg->tod=C2GMSK_PRINTBIT_ALL;
 	msg->datasize=datasize_corrected; // amount of data, corrected for word boundary
 	msg->realsize=sessid->d_printbitcount_v; // real amount of data

@@ -26,6 +26,10 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130506: 2400/15 bps modem
+// Version 20130601: golay FEC for 2400/15 modem
+// Version 20130606: change license from GPL to LGPL
+// Version 20130614: raw gmskbits option
 
 
 // c2gmsk API user-level support functions
@@ -38,6 +42,9 @@
 // c2gmsk_msgdecode_numeric
 // c2gmsk_msgdecode_codec2
 // c2gmsk_getapiversion
+// c2gmsk_msgdecode_gmsk
+// c2gmsk_msgdecode_gmsk_p
+
 
 // support functions
 
@@ -58,13 +65,22 @@ if (param) {
 	param->expected_apiversion=0;
 
 	// modulation
-	// (-1 = disable modulation)
+	// (-1 = disable modulation), will be initialised further on
 	param->m_bitrate=-1;
 	param->m_version=-1;
 
 	// demodulation
-	// (-1 = disable demodulation)
-	param->d_disableaudiolevelcheck=-1;
+	// disable audiolevel check: copy from global vars
+	param->d_disableaudiolevelcheck=DISABLE_AUDIOLEVELCHECK;
+
+	// output format: set to 0 (PCM audio output)
+	param->outputformat=0;
+
+	// not disable modulator
+	param->m_disabled = C2GMSK_NOTDISABLED;
+
+	// not disable demodulator
+	param->d_disabled = C2GMSK_NOTDISABLED;
 }; // end if
 
 return(C2GMSK_RET_OK);
@@ -207,6 +223,25 @@ return(NULL);
 }; // end function msgchain search for a particular type-of-data
 
 
+
+// checksignature function for messages
+int checksign_msg (struct c2gmsk_msg * msg) {
+// used for sanity checking
+
+// does it point somewhere
+if (!msg) {
+	return(C2GMSK_RET_NOVALIDMSG);
+}; // end if
+
+// check signature
+if (memcmp(msg->signature,MSG_SIGNATURE,4)) {
+	return(C2GMSK_RET_NOVALIDMSG);
+}; // end if
+
+// ok
+return(C2GMSK_RET_OK);
+}; // end function check signature for "message"
+
 //////////////////////////////////////////////////
 // function to decode "printbit" message
 // a message-buffer of up to 203 octets is expected.
@@ -217,12 +252,13 @@ return(NULL);
 
 
 char * c2gmsk_msgdecode_printbit (struct c2gmsk_msg * msg, char * txtbuffer, int marker) {
+int ret;
 
 // some sanity cheching
-
 // sanity checking
-// does the message point somewhere?
-if (!msg) {
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
 	return(NULL);
 }; // end if
 
@@ -317,15 +353,18 @@ return(NULL);
 
 
 int c2gmsk_msgdecode_numeric (struct c2gmsk_msg * msg, int *data) {
+int ret;
 
-// same sanity checking
-// pointer to msg should point somewhere
-if (!msg) {
-	return(-1);
+// sanity checking
+ret=checksign_msg(msg);
+
+// error: return value < 0
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
 }; // end if
 
 if (!data) {
-	return(-1);
+	return(-C2GMSK_RET_NOVALIDRETPOINT);
 }; // end if
 
 // check changes per type of data
@@ -398,21 +437,23 @@ return(-1);
 
 int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff) {
 c2gmsk_msg_codec2 *msgc2;
+int ret;
 
 
-// some sanity checking
-// pointer to msg should point somewhere
-if (!msg) {
-	return(-1);
+// sanity checking
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
 }; // end if
 
 // function is only valid for a "codec2" message
 if (msg->tod != C2GMSK_MSG_CODEC2) {
-	return(0);
+	return(-C2GMSK_RET_NOVALIDTOD);
 }; // end if
 
 if (!c2buff) {
-	return(-1);
+	return(-C2GMSK_RET_NOVALIDRETPOINT);
 }; // end fi
 
 msgc2=(c2gmsk_msg_codec2*) msg;
@@ -426,15 +467,9 @@ if (msgc2->version == C2GMSK_CODEC2_1400) {
 }; // end if
 
 // copy codec2 data: 1200 or 2400 bps: 8 octets
-if ((msgc2->version == C2GMSK_CODEC2_1200) || (msgc2->version == C2GMSK_CODEC2_2400)) {
-	memcpy(c2buff,msgc2->c2data,8);
-	// return version of codec2
-	return(msgc2->version);
-}; // end if
-
-
-// unknown version!
-return(-2);
+memcpy(c2buff,msgc2->c2data,8);
+// return version of codec2
+return(msgc2->version);
 
 }; // end function msgdecode codec2
 
@@ -442,24 +477,26 @@ return(-2);
 ///////////////////////////////////////////
 ///////// function MSG DECODE pcm48k
 
-// pcmbuff should point to buffer of at least 1920 16-bit integers (40 ms @ 48000 sampling)
+
 int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t pcmbuff[]) {
 int size;
 c2gmsk_msg_pcm48k *msgp;
+int ret;
 
-// some sanity checking
-// pointer to msg should point somewhere
-if (!msg) {
-	return(-1);
+// sanity checking
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
 }; // end if
 
 if (!pcmbuff) {
-	return(-1);
+	return(C2GMSK_RET_NOVALIDRETPOINT);
 }; // end fi
 
 // function is only valid for a "codec2" message
 if (msg->tod != C2GMSK_MSG_PCM48K) {
-	return(0);
+	return(C2GMSK_RET_NOVALIDTOD);
 }; // end if
 
 msgp=(c2gmsk_msg_pcm48k*) msg;
@@ -485,20 +522,23 @@ return(size>>1); ; // size = octets: divide by 2 to have samples
 int c2gmsk_msgdecode_pcm48k_p (struct c2gmsk_msg * msg, int16_t *pcmbuff[]) {
 int size;
 c2gmsk_msg_pcm48k *msgp;
+int ret;
 
-// some sanity checking
-// pointer to msg should point somewhere
-if (!msg) {
-	return(-1);
+// sanity checking
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
 }; // end if
 
+
 if (!pcmbuff) {
-	return(-1);
+	return(C2GMSK_RET_NOVALIDRETPOINT);
 }; // end fi
 
 // function is only valid for a "codec2" message
 if (msg->tod != C2GMSK_MSG_PCM48K) {
-	return(0);
+	return(C2GMSK_RET_NOVALIDTOD);
 }; // end if
 
 msgp=(c2gmsk_msg_pcm48k*) msg;
@@ -515,6 +555,99 @@ if (size > 3840) {
 return(size>>1); ; // size = octets: divide by 2 to have samples
 
 }; // end function msgdecode pcm48k_p
+
+
+///////// function MSG DECODE gmsk96
+// gmskbuff should point to buffer of at least 12 or 24 unsigned char
+// (40 ms @ 2400 bps = 96 bits = 12 octets, 40 ms @ 4800 bps = 192 bits = 24 octets)
+int c2gmsk_msgdecode_gmsk (struct c2gmsk_msg * msg, unsigned char * gmskbuff) {
+c2gmsk_msg_rawgmsk *msgp;
+int ret;
+
+// sanity checking
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
+}; // end if
+
+if (!gmskbuff) {
+	return(C2GMSK_RET_NOVALIDRETPOINT);
+}; // end fi
+
+// function is only valid for a "rawgmsk" message
+if ((msg->tod != C2GMSK_MSG_RAWGMSK_96) && (msg->tod != C2GMSK_MSG_RAWGMSK_192)) {
+	return(C2GMSK_RET_NOVALIDTOD);
+}; // end if
+
+// OK, it's a GMSK message
+msgp=(c2gmsk_msg_rawgmsk*) msg;
+
+// check size.
+
+if ((msg->tod == C2GMSK_MSG_RAWGMSK_96) && (msg->datasize != 12)) {
+	return(0);
+}; // end if
+
+if ((msg->tod == C2GMSK_MSG_RAWGMSK_192) && (msg->datasize != 24)) {
+	return(0);
+}; // end if
+
+
+memcpy(gmskbuff,msgp->data,msg->datasize);
+
+// DONE
+return(msg->datasize); 
+}; // end function msgdecode gmsk
+
+
+///////////////////////////////////////////
+///////// function MSG DECODE gmskk, "return pointer" version
+
+// this function does not copy the data to the destination, but just returns a pointer to it
+// should save one "memory copy" to do
+
+int c2gmsk_msgdecode_gmsk_p (struct c2gmsk_msg * msg, unsigned char ** gmskbuff) {
+c2gmsk_msg_rawgmsk *msgp;
+int ret;
+
+// sanity checking
+ret=checksign_msg(msg);
+
+if (ret != C2GMSK_RET_OK) {
+	return(-ret);
+}; // end if
+
+if (!gmskbuff) {
+	return(C2GMSK_RET_NOVALIDRETPOINT);
+}; // end fi
+
+// function is only valid for a "rawgmsk" message
+if ((msg->tod != C2GMSK_MSG_RAWGMSK_96) && (msg->tod != C2GMSK_MSG_RAWGMSK_192)) {
+	return(C2GMSK_RET_NOVALIDTOD);
+}; // end if
+
+// OK, it's a GMSK message
+msgp=(c2gmsk_msg_rawgmsk*) msg;
+
+// check size.
+
+if ((msg->tod == C2GMSK_MSG_RAWGMSK_96) && (msg->datasize != 12)) {
+	return(0);
+}; // end if
+
+if ((msg->tod == C2GMSK_MSG_RAWGMSK_192) && (msg->datasize != 24)) {
+	return(0);
+}; // end if
+
+// copy pointer to buffer in gmskbuff 
+*gmskbuff=msgp->data;
+
+
+// done
+return(msg->datasize); 
+
+}; // end function msgdecode gmsk_p
 
 
 ///////////////////

@@ -46,7 +46,7 @@ INTMATH = 64
 
 all:	gmskmodemapi
 
-test:	apitest_modulate_2400 apitest_modulate_4800 apitest_demodulate_2400 apitest_demodulate_4800
+test:	apitest_modulate apitest_demodulate
 
 	
 gmskmodemapi: Makefile gmskmodemapi.c gmskmodemapi.h dspstuff_4800.h dspstuff_2400.h gmskmodulate.h  countdiff.h global.h c2gmskchain.h c2gmskabuff.h c2gmsksess.h c2gmskprintbit.h c2gmskdebugmsg.h c2gmsksupport.h c2gmskstr.h c2gmskmodulate.h c2_interleave.h c2_scramble.h c2_fec.h golay23.o
@@ -62,17 +62,10 @@ install:
 	ln -s -f /usr/lib/libc2gmsk.so.0.0.0 /usr/lib/libc2gmsk.so
 	install -o root -g root -m 755 c2gmsk.h /usr/include
 
-apitest_modulate_2400: Makefile apitest_modulate_2400.c gmskmodemapi.o
-	gcc -O2 -Wall -o apitest_modulate_2400 apitest_modulate_2400.c -lc2gmsk
+apitest_modulate: Makefile apitest_modulate.c gmskmodemapi.o
+	gcc -O2 -Wall -o apitest_modulate apitest_modulate.c -lc2gmsk
 
-apitest_demodulate_2400: Makefile apitest_demodulate_2400.c gmskmodemapi.o
-	gcc -O2 -Wall -o apitest_demodulate_2400 apitest_demodulate_2400.c -lc2gmsk
-
-
-apitest_modulate_4800: Makefile apitest_modulate_4800.c gmskmodemapi.o
-	gcc -O2 -Wall -o apitest_modulate_4800 apitest_modulate_4800.c -lc2gmsk
-
-apitest_demodulate_4800: Makefile apitest_demodulate_4800.c gmskmodemapi.o
-	gcc -O2 -Wall -o apitest_demodulate_4800 apitest_demodulate_4800.c -lc2gmsk
+apitest_demodulate: Makefile apitest_demodulate.c gmskmodemapi.o
+	gcc -O2 -Wall -o apitest_demodulate apitest_demodulate.c -lc2gmsk
 
 

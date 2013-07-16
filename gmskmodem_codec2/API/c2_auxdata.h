@@ -100,7 +100,6 @@ return(C2GMSK_RET_OK);
 // (re)init to-send text 
 int auxdata_sessinit_s (struct c2gmsk_session * sessid) {
 
-printf("auxdata_sessinit ! \n");
 sessid->auxdata_s_data=NULL;
 sessid->auxdata_s_size=0;
 
@@ -329,7 +328,7 @@ if (!msg) {
 	return(C2GMSK_RET_NOMEMORY);
 }; // end if
 
-
+memcpy(msg->signature,MSG_SIGNATURE,4);
 msg->tod=C2GMSK_MSG_AUXDATA ;
 msg->datasize=memsize_data + (sizeof(int)<<1); // amount of data (incl. terminating null) , corrected for word boundairy + 2 * integer
 msg->realsize=size + 1; // real size (incl. terminating null)

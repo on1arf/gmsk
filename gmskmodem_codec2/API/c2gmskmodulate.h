@@ -26,6 +26,7 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130614: raw gmsk output
 
 
 // c2gmsk highlevel modulate functions
@@ -33,6 +34,8 @@
 // functions: 
 // c2gmskabuff48k_modulatebits
 // c2gmsk_mod_audioflush
+// c2gmsk_mod_gmskflush
+// c2gmsk_mod_outputflush
 
 
 // ADD TO BUFFER
@@ -88,7 +91,7 @@ if (ret != C2GMSK_RET_OK) {
 
 
 // check signature of audio buffer
-ret=checksign_abuff_48k(&sessid->m_abuff);
+ret=checksign_abuff_48k(sessid->m_abuff);
 if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
@@ -120,7 +123,7 @@ for (loop=0; loop < nbits; loop++) {
 	}; // end if
 
 	// write audio to audio-buffer
-	ret=c2gmskabuff48_add(&sessid->m_abuff,audioret,samplesperbit,sessid->m_chain);
+	ret=c2gmskabuff48_add(sessid->m_abuff,audioret,samplesperbit,sessid->m_chain);
 
 	if (ret != C2GMSK_RET_OK) {
 		return(ret);
@@ -164,6 +167,19 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+
+
+// some additional checks
+// modulator disabled?
+if (sessid->m_disabled != C2GMSK_NOTDISABLED) {
+	return(C2GMSK_RET_OPERATIONDISABLED);
+}; // end if
+
+// just return if no audio buffer
+if (!sessid->m_abuff) {
+	return(C2GMSK_RET_OK);
+}; // end if
+
 // reinit chain
 ret=c2gmskchain_reinit(sessid->m_chain, C2GMSKCHAIN_DEFAULTSIZE_MOD);
 
@@ -173,8 +189,7 @@ if (ret != C2GMSK_RET_OK) {
 }; // end if
 
 
-ret=c2gmskabuff48_flush(&sessid->m_abuff,sessid->m_chain);
-
+ret=c2gmskabuff48_flush(sessid->m_abuff,sessid->m_chain);
 if (ret != C2GMSK_RET_OK) {
 	// something went wrong, exit
 	return(ret);
@@ -186,5 +201,98 @@ if (ret != C2GMSK_RET_OK) {
 return(C2GMSK_RET_OK);
 
 }; // end function c2gmsk_mod_audioflush
+
+
+/////////////////////////////////////////////////
+// flush gmsk-buffers of modulation chain
+/////////////////////////////////////////////////
+int c2gmsk_mod_gmskflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out) {
+// local vars
+int ret;
+
+// sanity checks
+ret=checksign_sess(sessid);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
+
+// some additional checks
+// modulator disabled?
+if (sessid->m_disabled != C2GMSK_NOTDISABLED) {
+	return(C2GMSK_RET_OPERATIONDISABLED);
+}; // end if
+
+// just return if no gmsk buffer
+if (!sessid->m_gbuff) {
+	return(C2GMSK_RET_OK);
+}; // end if
+
+
+// reinit chain
+ret=c2gmskchain_reinit(sessid->m_chain, C2GMSKCHAIN_DEFAULTSIZE_MOD);
+
+if (ret != C2GMSK_RET_OK) {
+	// something went wrong, exit
+	return(ret);
+}; // end if
+
+
+ret=c2gmskgbuff_flush(sessid->m_gbuff,sessid->m_chain);
+
+if (ret != C2GMSK_RET_OK) {
+	// something went wrong, exit
+	return(ret);
+}; // end if
+
+// done, OK
+*out=sessid->m_chain;
+return(C2GMSK_RET_OK);
+
+}; // end function c2gmsk_mod_gmskflush
+
+
+///////////////////////////////////////////////////////////////
+// flush output buffers (abuff or gbuff) of modulation chain
+//////////////////////////////////////////////////////////////
+int c2gmsk_mod_outputflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out) {
+// local vars
+int ret;
+
+// sanity checks
+ret=checksign_sess(sessid);
+if (ret != C2GMSK_RET_OK) {
+	return(ret);
+}; // end if
+
+// some additional checks
+// modulator disabled?
+if (sessid->m_disabled != C2GMSK_NOTDISABLED) {
+	return(C2GMSK_RET_OPERATIONDISABLED);
+}; // end if
+
+if (sessid->outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+// outputformat = AUDIO
+	ret=c2gmsk_mod_audioflush (sessid, out);
+
+	// return is not OK
+	if (ret != C2GMSK_RET_OK) {
+		return(ret);
+	}; // end if
+
+} else if (sessid->outputformat == C2GMSK_OUTPUTFORMAT_GMSK) {
+// outputformat = GMSK
+	ret=c2gmsk_mod_gmskflush (sessid, out);
+
+	// return is not OK
+	if (ret != C2GMSK_RET_OK) {
+		return(ret);
+	}; // end if
+
+}; // end elsif - if
+
+*out=sessid->m_chain;
+return(C2GMSK_RET_OK);
+
+}; // end function c2gmsk_mod_gmskflush
 
 

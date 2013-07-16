@@ -7,6 +7,7 @@
 // Version 20130506: added 2400 bps modem (versid 2400/15)
 // Version 20130601: added support for golay FEC in modem 2400/15
 // Version 20130606: added support for auxiliary data in modem 2400/15
+// Version 20130614: add support for hardware gmskmodems
 
 
 /* Copyright (C) 2013 Kristoff Bonne ON1ARF
@@ -28,7 +29,7 @@
 
 // defines
 // version id
-#define C2GMSK_APIVERSION 20130606
+#define C2GMSK_APIVERSION 20130614
 
 
 // return values of functions
@@ -54,7 +55,12 @@
 #define C2GMSK_RET_UNSUPPORTEDVERSIONID 17
 #define C2GMSK_RET_UNSUPPORTEDMODEMBITRATE 18
 #define C2GMSK_RET_OPERATIONDISABLED 19
+#define C2GMSK_RET_UNSUPPORTEDOUTPUTFORMAT 20
+#define C2GMSK_RET_UNSUPPORTEDDISABLE 21
 
+#define C2GMSK_RET_NOVALIDGBUFF 22
+#define C2GMSK_RET_NOVALIDMSG 23
+#define C2GMSK_RET_NOVALIDTOD 24
 
 
 // Type Of Data
@@ -67,7 +73,9 @@
 #define C2GMSK_MSG_PCM8K 0x21
 #define C2GMSK_MSG_PCM48K 0x22
 #define C2GMSK_MSG_AUXDATA 0x23 // received auxdata
-#define C2GMSK_MSG_AUXDATA_DONE 0x24 // sending auxdata is done
+#define C2GMSK_MSG_AUXDATA_DONE 0x24 // event notification when sending auxdata is done
+#define C2GMSK_MSG_RAWGMSK_96 0x25 // 96 bits of raw GMSK data (= 40 ms @ 2400 bps)
+#define C2GMSK_MSG_RAWGMSK_192 0x26 // 192 bits of raw GMSK data (= 40 ms @ 4800 bps)
 
 
 // data types used for debug information
@@ -112,6 +120,12 @@
 #define C2GMSK_MODEMBITRATE_2400 1
 #define C2GMSK_MODEMBITRATE_4800 2
 
+#define C2GMSK_OUTPUTFORMAT_AUDIO 0
+#define C2GMSK_OUTPUTFORMAT_GMSK 1
+
+#define C2GMSK_NOTDISABLED 0
+#define C2GMSK_DISABLED 1
+
 
 // capabilities of the API
 #define C2GMSK_CAP_C2GMSKVER 1
@@ -149,6 +163,16 @@ struct c2gmsk_param {
 
 	// parameters for demodulation
 	int d_disableaudiolevelcheck;
+	int d_bitrate; // 2400 or 4800 bps fixed, "auto" to be added later
+
+	// output format: 0 (PCM48K audio PCM48K) or 1 (binairy GMSK)
+	int outputformat;
+
+	// disable modulator?
+	int m_disabled;
+
+	// disable demodulator ?
+	int d_disabled;
 };
 
 
@@ -180,9 +204,12 @@ int c2gmsk_mod_start (struct c2gmsk_session * sessid,  struct c2gmsk_msgchain **
 int c2gmsk_mod_voice1400 (struct c2gmsk_session * sessid, unsigned char * c2dataframe, struct c2gmsk_msgchain ** out);
 int c2gmsk_mod_voice1400_end (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
 int c2gmsk_mod_audioflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
+int c2gmsk_mod_outputflush (struct c2gmsk_session * sessid, struct c2gmsk_msgchain ** out);
 
 int c2gmsk_demod_init (struct c2gmsk_session * sessid, struct c2gmsk_param *param);
-int c2gmsk_demod (struct c2gmsk_session * sessid, int16_t  * in, struct c2gmsk_msgchain ** out);
+int c2gmsk_demod (struct c2gmsk_session * sessid, int16_t  * in, struct c2gmsk_msgchain ** out); // will be removed in later versions of API
+int c2gmsk_demodpcm (struct c2gmsk_session * sessid, int16_t  * in, struct c2gmsk_msgchain ** out);
+int c2gmsk_demodgmsk (struct c2gmsk_session * sessid, unsigned char * in, struct c2gmsk_msgchain ** out);
 
 
 
@@ -197,6 +224,10 @@ int c2gmsk_msgdecode_c2 (struct c2gmsk_msg * msg, unsigned char * c2buff);
 // msgdecode pcm48k -> copy data, pcm48k_p -> only copy pointer
 int c2gmsk_msgdecode_pcm48k (struct c2gmsk_msg * msg, int16_t  pcmbuff[]);
 int c2gmsk_msgdecode_pcm48k_p (struct c2gmsk_msg * msg, int16_t *pcmbuff_ptr[]);
+
+// msgdecode gmsk -> copy data, gmsk_p -> only copy pointer
+int c2gmsk_msgdecode_gmsk (struct c2gmsk_msg * msg, unsigned char * gmskbuff);
+int c2gmsk_msgdecode_gmsk_p (struct c2gmsk_msg * msg, unsigned char ** gmskbuff_ptr);
 
 // auxiliary data service
 int c2gmsk_auxdata_sendmessage(struct c2gmsk_session * sessid, char * message, int size);

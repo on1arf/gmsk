@@ -25,6 +25,7 @@
 // version 20130326: initial release
 // version 20130404: added halfduplex support
 // version 20130606: license changed to LGPL
+// version 20130614: add support for bps and c2gmskversion
 
 
 
@@ -187,6 +188,8 @@ global.adevice=0;
 global.exact=0;
 global.c2gmsksessid=NULL;
 global.halfduplex=0;
+global.c2gmskbps=-1; // default is 2400 bps/c2gmsk version 15 or version 0 if 4800 bps is selected
+global.c2gmskvers=-1; // set to -1 (undef) here. Change in parsecliopt if necessairy
 
 // pointers in ringbuffer
 global.pntr_r_write=1;
@@ -253,11 +256,31 @@ if (retval != C2GMSK_RET_OK) {
 }; // end if
 
 // fill in parameters
-param.expected_apiversion=0;
+
 param.d_disableaudiolevelcheck=1;
-// bitrate 4800, version 0
-param.m_version=0;
-param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
+
+// we need at least API version 20130614 to accept other modes then 4800/0
+if ((global.c2gmskbps == 4800) && (global.c2gmskvers == 0)) {
+	param.expected_apiversion=0;
+} else {
+	param.expected_apiversion=20130614;
+
+	// default values for 20130614 API
+	// set to to be sure
+	param.outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
+	param.m_disabled=C2GMSK_NOTDISABLED;
+	param.d_disabled=C2GMSK_NOTDISABLED;
+}; // end else - if
+
+// set gmsk version
+param.m_version=global.c2gmskvers;
+
+// bps should be 2400 or 4800, already checked in parsecliopt
+if (global.c2gmskbps == 2400) {
+	param.m_bitrate=C2GMSK_MODEMBITRATE_2400;
+} else {
+	param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
+}; // end else - if
 
 // create gmsk session
 global.c2gmsksessid=c2gmsk_sess_new(&param,&retval, pchain);

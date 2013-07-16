@@ -1,13 +1,7 @@
 //////////////////////
 // API version of the GMSK modem for 10m / VHF / UHF communication
 // using codec2
-// version 15: 2400 bps
-
-
-// The low-level DSP functions are largly taken from the
-// pcrepeatercontroller project written by
-// Jonathan Naylor, G4KLX
-// More info: http://groups.yahoo.com/group/pcrepeatercontroller
+// codec versions 4800/0 and 2400/15
 
 
 /*
@@ -31,6 +25,7 @@
 // version 20130310 initial release
 // Version 20130314: API c2gmsk version / bitrate control + versionid codes
 // Version 20130324: convert into .so shared library
+// Version 20130614: merge 2400 and 4800 bps modem, add auxdata, add raw-gmsk output
 
 
 
@@ -57,7 +52,7 @@
 
 
 // functions written below
-void write_audio_to_file(int, struct c2gmsk_msg *);
+void write_to_file(int, struct c2gmsk_msg *, int);
 
 ///////////////////////
 // application starts here
@@ -70,7 +65,7 @@ struct c2gmsk_param param;
 
 int16_t silence[480]; // 480 samples = 10 ms @ 48Khz samplerate
 int tod, numsample, msgnr;
-int framecount;
+int framecount, msgcount;
 
 int f_out, f_in; // file out and file in 
 char * infilename, * outfilename; // names in input and output files
@@ -82,17 +77,46 @@ int nsample;
 
 unsigned char inbuffer[7];
 
-char * mytext="ABCD1234";
+char * mytext;
 
+int bitrate;
+int outputformat;
 
 // check parameters, we need at least 2 parameters: infile and outfile
-if (argc < 3) {
-	fprintf(stderr,"Error: at least 2 parameters needed.\nUsage: %s infile.c2 modaudiofile.raw \n",argv[0]);
+if (argc < 5) {
+	fprintf(stderr,"Error: at least 4 parameters needed.\n");
+	fprintf(stderr,"Usage: %s infile.c2 modaudiofile.raw bitrate outformat <auxdata-text>\n",argv[0]);
+	fprintf(stderr,"bitrate: 2400 or 4800\n");
+	fprintf(stderr,"outformat: \"a\" (audio) or \"g\" (gmsk)\n");
 	exit(-1);
 } else {
 	infilename=argv[1];
 	outfilename=argv[2];
+
+	bitrate=atoi(argv[3]);
 }; // end else - if
+
+if ((bitrate != 2400) && (bitrate != 4800)) {
+	fprintf(stderr,"Error: bitrate should be 2400 or 4800. Got %d.\n",bitrate);
+	exit(-1);
+}; // end if
+
+if ((argv[4][0] == 'a') || (argv[4][0] == 'A')) {
+	outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
+} else if ((argv[4][0] == 'g') || (argv[4][0] == 'G')) {
+	outputformat=C2GMSK_OUTPUTFORMAT_GMSK;
+} else {
+	fprintf(stderr,"Error: output format should be audio or GMSK, got %c.\n",argv[4][0]);
+	exit(-1);
+}; // else else - elsif - if
+
+
+if (argc > 5) {
+	// extra argument: to send text
+	mytext=argv[5];
+} else {
+	mytext=NULL;
+}; // end if
 
 // fill silence will all zero
 memset(&silence,0,sizeof(silence));
@@ -128,13 +152,24 @@ if (ret != C2GMSK_RET_OK) {
 
 // fill in parameter
 // global
-param.expected_apiversion=20130606;
+
+// API needed for raw gmsk-output
+param.expected_apiversion=20130614;
 
 // modulation parameters
-param.m_version=15; // version 15 for 2400 bps
-param.m_bitrate=C2GMSK_MODEMBITRATE_2400;
+if (bitrate == 2400) {
+	param.m_version=15; // version 15 for 2400 bps
+	param.m_bitrate=C2GMSK_MODEMBITRATE_2400;
+} else {
+	param.m_version=0; // version 0 for 4800 bps
+	param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
+}; // end else - if
 
-// demodulation parameters not filled in (we do not do any demodulation here)
+// disactivate demodulation
+param.d_disabled=C2GMSK_DISABLED;
+
+// set output format
+param.outputformat=outputformat;
 
 
 // init session
@@ -146,9 +181,12 @@ if (ret != C2GMSK_RET_OK) {
 
 
 // create 300 ms of silence ( 30 times 10 ms)
-for (loop=0; loop<30; loop++){
-	ret=write(f_out,silence,sizeof(silence));
-}; // end for
+// only if output format is gmsk
+if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+	for (loop=0; loop<30; loop++){
+		ret=write(f_out,silence,sizeof(silence));
+	}; // end for
+}; // end if
 
 
 //////////////////////////////////////////////////////////////////////
@@ -169,17 +207,39 @@ if (ret != C2GMSK_RET_OK) {
 
 // loop throu all messages
 // message chain is in "chain"
-// we are only interested in C2GMSK_MSG_PCM48K messages
+// we are only interested in C2GMSK_MSG_PCM48K, GMSK96 or GMSK192 messages
 // number of audio frames is returned in numsample
 // message number if returned in msgnr
 
-tod=C2GMSK_MSG_PCM48K;
+if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+// audio
+	tod=C2GMSK_MSG_PCM48K;
+} else {
+// raw GMSK
+
+	if (bitrate == 2400) {
+		tod=C2GMSK_MSG_RAWGMSK_96;
+	// 2400 bps
+	} else {
+	// 4800 bps
+		tod=C2GMSK_MSG_RAWGMSK_192;
+	}; // end if
+}; // end if
 
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
-	printf("Processing message %d of start\n",msgnr);
 
-	// write audio to file: defined bewlo
-	write_audio_to_file(f_out, msg);
+	if (tod == C2GMSK_MSG_PCM48K) {
+		printf("Processing message %d of mod_start (AUDIO)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_96) {
+		printf("Processing message %d of mod_start (GMSK_96)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_192) {
+		printf("Processing message %d of mod_start (GMSK_192)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	}; // end elsif - elsif - if
+
+	framecount++;
 }; // end while
 
 
@@ -191,10 +251,8 @@ ret=read(f_in, inbuffer,7);
 
 framecount=0;
 while (ret == 7) {
-	int msgcount;
-
-	// send message after frame 3
-	if (framecount == 3) {
+	// send message after frame 3, if it exists (if not, mytext points to NULL)
+	if ((framecount == 3) && (mytext)) {
 		ret=c2gmsk_auxdata_sendmessage(sessid,mytext,7);
 	};
 
@@ -220,8 +278,14 @@ while (ret == 7) {
 		
 
 		if (tod == C2GMSK_MSG_PCM48K) {
-			printf("Processing message %d.%d of voice1400\n",framecount,msgcount);
-			write_audio_to_file(f_out, msg);
+			printf("Processing message %d.%d of voice1400 (AUDIO)\n",framecount,msgcount);
+			write_to_file(f_out, msg, tod);
+		} else if (tod == C2GMSK_MSG_RAWGMSK_96) {
+			printf("Processing message %d.%d of voice1400 (GMSK_96)\n",framecount,msgcount);
+			write_to_file(f_out, msg, tod);
+		} else if (tod == C2GMSK_MSG_RAWGMSK_192) {
+			printf("Processing message %d.%d of voice1400 (GMSK_192)\n",framecount,msgcount);
+			write_to_file(f_out, msg, tod);
 		} else if (tod == C2GMSK_MSG_AUXDATA_DONE) {
 			printf("message %d.%d AUXDATA DONE \n",framecount,msgcount);
 		} else {
@@ -249,13 +313,36 @@ if (ret != C2GMSK_RET_OK) {
 	exit(-1);
 }; // end if
 
-// we are looking for type-of-message C2GMSK_MSG_PCM48K
-tod=C2GMSK_MSG_PCM48K;
+// we are looking for type-of-message C2GMSK_MSG_PCM48K, RAW96 or RAW192
+if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+// audio
+	tod=C2GMSK_MSG_PCM48K;
+} else {
+// raw GMSK
 
+	if (bitrate == 2400) {
+		tod=C2GMSK_MSG_RAWGMSK_96;
+	// 2400 bps
+	} else {
+	// 4800 bps
+		tod=C2GMSK_MSG_RAWGMSK_192;
+	}; // end if
+}; // end if
+
+msgnr=0;
 while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
-	printf("Processing message %d of voice1400_end\n",msgnr);
+	if (tod == C2GMSK_MSG_PCM48K) {
+		printf("Processing message %d of mod_end (AUDIO)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_96) {
+		printf("Processing message %d of mod_end (GMSK_96)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_192) {
+		printf("Processing message %d of mod_end (GMSK_192)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	}; // end elsif - elsif - if
 
-	write_audio_to_file(f_out, msg);
+	msgnr++;
 }; // end while
 
 
@@ -263,8 +350,8 @@ while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &
 ///////////////////// AUDIOFLUSH  ////////////////////////////////
 //////////////////////////////////////////////////////////////
 
-// flush remaining audio in audiobuffer
-ret=c2gmsk_mod_audioflush(sessid,pchain);
+// flush remaining audio in audiobuffee
+ret=c2gmsk_mod_outputflush(sessid,pchain);
 chain=*pchain;
 
 if (ret != C2GMSK_RET_OK) {
@@ -272,49 +359,92 @@ if (ret != C2GMSK_RET_OK) {
 	exit(-1);
 }; // end if
 
-while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
-	printf("Processing message %d of audioflush\n",msgnr);
 
-	write_audio_to_file(f_out, msg);
+msgnr=0;
+while ((msg = c2gmsk_msgchain_search_tod(C2GMSK_SEARCH_POSCURRENT, chain, tod, &numsample, &msgnr))) {
+	if (tod == C2GMSK_MSG_PCM48K) {
+		printf("Processing message %d of outputflush (AUDIO)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_96) {
+		printf("Processing message %d of outputflush (GMSK_96)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	} else if (tod == C2GMSK_MSG_RAWGMSK_192) {
+		printf("Processing message %d of outputflush (GMSK_192)\n",msgnr);
+		write_to_file(f_out, msg, tod);
+	}; // end elsif - elsif - if
+
+	msgnr++;
 }; // end while
 
+/////////// END SILENCE ///////////
 
-////////////////////////////////////////////////////////////////
-///////////////////// END SILENCE /////////////////////
-//////////////////////////////////////////////
 
-// create 1000 ms of silence ( 100 times 10 ms)
-for (loop=0; loop<100; loop++){
-	ret=write(f_out,silence,sizeof(silence));
-}; // end for
+if (outputformat == C2GMSK_OUTPUTFORMAT_AUDIO) {
+	// create 1000 ms of silence ( 100 times 10 ms)
+	for (loop=0; loop<100; loop++){
+		ret=write(f_out,silence,sizeof(silence));
+	}; // end for
+}; // end if
 
 close(f_out);
 return(0);
 }; // end application
+
+
 ////////////////////////////////
 ////////// END OF APPLICATION
+//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////
+////////////////////////////////////////////////
+
 
 
 /////////////////////////////////////////////
 /// function write_to_file
 
-void write_audio_to_file(int file_out, struct c2gmsk_msg * msg) {
-int nsample, ret;
-int16_t pcmbuffer[1920];
+void write_to_file(int file_out, struct c2gmsk_msg * msg, int tod) {
+int size=0, ret;
+
+// reuse memory for both types of data
+union {
+	int16_t pcmbuffer[1920];
+	unsigned char gmskbuffer[24];
+} buff_u;
 
 
-nsample=c2gmsk_msgdecode_pcm48k(msg,pcmbuffer);
+// some sanity checking
+if (tod == C2GMSK_MSG_PCM48K) {
+	size=c2gmsk_msgdecode_pcm48k(msg,buff_u.pcmbuffer);
 
-// we should have received 1920 samples
-if (nsample < 1920) {
-	fprintf(stderr,"mod_start did not receive sufficient data: expected 1920: got %d \n",nsample);
+	// "size" here is actually number of samples (half the number of octets)
+	// we should have received 1920 samples
+	if (size < 1920) {
+		fprintf(stderr,"mod / write_to_file error %d: %s\n",-size,c2gmsk_printstr_ret(-size));
+		return;
+	}; // end if
+
+	// double the size to get read number of octets
+	size <<= 1;
+} else if ((tod == C2GMSK_MSG_RAWGMSK_96) || (tod == C2GMSK_MSG_RAWGMSK_192)) {
+	size=c2gmsk_msgdecode_gmsk(msg,buff_u.gmskbuffer);
+
+	if (size < 0) {
+		fprintf(stderr,"mod / write to file error %d: %s\n",-size,c2gmsk_printstr_ret(-size));
+		return;
+	}; // end if
+
+} else {
+	// some unknown type-of-data
+	fprintf(stderr,"mod / write_to_file got unexpected type of data: %d\n",tod);
 }; // end if
 
+
 // write data
-ret=write(file_out,pcmbuffer,(nsample<<1)); // ret = samples -> so multiply by 2 to get octets
-if (ret < 0) {
+ret=write(file_out,&buff_u,size); // 
+if (ret < size) {
 	// write should return number of octets written
-	fprintf(stderr,"Error: could write not data: %d (%s)\n",errno,strerror(errno));
+	fprintf(stderr,"Error: could write not data (expected %d, write %d). Error %d (%s)\n",size,ret,errno,strerror(errno));
 }; // end if
 
 }; // end function 

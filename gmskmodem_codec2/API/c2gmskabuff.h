@@ -109,6 +109,7 @@ while (samplestodo > 0) {
 	// if buffer is full, write to chain
 	if (buffer->used >= 1920) {
 		// reinit vars of msg-structure, just to be sure
+		memcpy(&buffer->audio.signature,MSG_SIGNATURE,4);
 		buffer->audio.tod=C2GMSK_MSG_PCM48K;
 		buffer->audio.datasize=3840;
 		ret=c2gmskchain_add(chain,&buffer->audio,sizeof(buffer->audio));
@@ -155,6 +156,12 @@ if (!chain) {
 ret=checksign_chain(chain);
 if (ret != C2GMSK_RET_OK) {
 	return(ret);
+}; // end if
+
+
+// if nothing in buffer, just return
+if (buffer->used == 0) {
+	return(C2GMSK_RET_OK);
 }; // end if
 
 // if buffer is less then 1920 frames (which is supposed to have as

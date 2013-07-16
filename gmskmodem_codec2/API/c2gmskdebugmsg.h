@@ -51,6 +51,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=0; // no data
 
@@ -70,6 +71,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=sizeof(int); // 1 integer
 msg.data0=data0;
@@ -90,6 +92,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=(sizeof(int)<<1); // 2 integers
 msg.data0=data0;
@@ -111,6 +114,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=sizeof(int) + sizeof(int) + sizeof(int); // 3 integers
 msg.data0=data0;
@@ -133,6 +137,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=(sizeof(int)<<2); // 4 integers
 msg.data0=data0;
@@ -181,6 +186,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=0; // no data
 
@@ -200,6 +206,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=sizeof(int); // 1 integer
 msg.data0=data0;
@@ -220,6 +227,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=(sizeof(int)<<1); // 2 integers
 msg.data0=data0;
@@ -241,6 +249,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=sizeof(int) + sizeof(int) + sizeof(int); // 3 integers
 msg.data0=data0;
@@ -263,6 +272,7 @@ if (ret != C2GMSK_RET_OK) {
 	return(ret);
 }; // end if
 
+memcpy(msg.signature,MSG_SIGNATURE,4);
 msg.tod=message;
 msg.datasize=(sizeof(int)<<2); // 4 integers
 msg.data0=data0;
