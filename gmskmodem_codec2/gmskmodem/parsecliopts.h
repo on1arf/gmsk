@@ -202,7 +202,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 
 	} else if (strcmp(thisarg,"-c2gmskbps") == 0) {
 		// c2gmsk bps
-		if (pglobal->c2gmskbps != 0) {
+		if (pglobal->c2gmskbps != -1) {
 			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskbps can only be set only once\n");
 			return(-1);
 		}; // end if
@@ -220,7 +220,7 @@ for (paramloop=1; paramloop <argc; paramloop++) {
 
 	} else if (strcmp(thisarg,"-c2gmskvers") == 0) {
 		// c2gmsk version
-		if (pglobal->c2gmskbps != 0) {
+		if (pglobal->c2gmskvers != -1) {
 			snprintf(retmsg,PARSECLIRETMSGSIZE,"Error: c2gmskvers can only be set only once\n");
 			return(-1);
 		}; // end if
@@ -362,14 +362,8 @@ if (argc <= 2) {
 
 // Done reading all parameters.
 
-// set some implicit parameters
-// set c2gmskbps/c2gmskversion to 2400/15, if not c2gmskbps and c2gmskversion are not set
-if ((pglobal->c2gmskbps == -1) && (pglobal->c2gmskvers == -1)) {
-	pglobal->c2gmskbps=2400;
-	pglobal->c2gmskvers=15;
-}; // end if
 
-
+// error checks on bps and version 
 // if c2gmskbps is set to 2400, set default c2gmskversion = 15
 if ((pglobal->c2gmskbps == 2400) && (pglobal->c2gmskvers == -1)) {
 	pglobal->c2gmskvers=15;

@@ -251,7 +251,7 @@ for (loop=0; loop < NUMBUFF; loop++) {
 // create parameters structure
 retval=c2gmsk_param_init(&param);
 if (retval != C2GMSK_RET_OK) {
-	fprintf(stderr,"Error: Could not initialise parameter structures! \n");
+	fprintf(stderr,"Error: Could not initialise parameter structures: %d (%s)\n",retval,c2gmsk_printstr_ret(retval));
 	exit(-1);
 }; // end if
 
@@ -259,18 +259,14 @@ if (retval != C2GMSK_RET_OK) {
 
 param.d_disableaudiolevelcheck=1;
 
-// we need at least API version 20130614 to accept other modes then 4800/0
-if ((global.c2gmskbps == 4800) && (global.c2gmskvers == 0)) {
-	param.expected_apiversion=0;
-} else {
-	param.expected_apiversion=20130614;
+// we need at least API version 20130614
+param.expected_apiversion=20130614;
 
-	// default values for 20130614 API
-	// set to to be sure
-	param.outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
-	param.m_disabled=C2GMSK_NOTDISABLED;
-	param.d_disabled=C2GMSK_NOTDISABLED;
-}; // end else - if
+// default values for 20130614 API
+// set to to be sure
+param.outputformat=C2GMSK_OUTPUTFORMAT_AUDIO;
+param.m_disabled=C2GMSK_NOTDISABLED;
+param.d_disabled=C2GMSK_NOTDISABLED;
 
 // set gmsk version
 param.m_version=global.c2gmskvers;
@@ -278,14 +274,16 @@ param.m_version=global.c2gmskvers;
 // bps should be 2400 or 4800, already checked in parsecliopt
 if (global.c2gmskbps == 2400) {
 	param.m_bitrate=C2GMSK_MODEMBITRATE_2400;
+	param.d_bitrate=C2GMSK_MODEMBITRATE_2400;
 } else {
 	param.m_bitrate=C2GMSK_MODEMBITRATE_4800;
+	param.d_bitrate=C2GMSK_MODEMBITRATE_4800;
 }; // end else - if
 
 // create gmsk session
 global.c2gmsksessid=c2gmsk_sess_new(&param,&retval, pchain);
 if (retval != C2GMSK_RET_OK) {
-	fprintf(stderr,"Error: could not create C2GMSK session: %d \n",retval);
+	fprintf(stderr,"Error: could not create C2GMSK session: %d (%s)\n",retval,c2gmsk_printstr_ret(retval));
 	exit(-1);
 }; // end if
 
@@ -310,11 +308,15 @@ while ((msg = c2gmsk_msgchain_search (C2GMSK_SEARCH_POSCURRENT, chain, &tod, &da
 		if ((c2gmsk_msg_data[1] == C2GMSK_MODEMBITRATE_4800) && (c2gmsk_msg_data[0] == 0)) {
 			supported=1;
 		}; // end else - if
+
+		if ((c2gmsk_msg_data[1] == C2GMSK_MODEMBITRATE_2400) && (c2gmsk_msg_data[0] == 15)) {
+			supported=1;
+		}; // end else - if
 	}; 
 }; // end while
 
 if (!supported) {
-	fprintf(stderr,"Error: c2gmsk mode 0 @ 4800 bps not supported by the c2gmsk API.\n");
+	fprintf(stderr,"Error: c2gmsk mode not supported by the c2gmsk API.\n");
 	exit(-1);	
 }; // end if
 
